@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -31,6 +32,13 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("kbot %s started", appVersion)
+		commands := map[string]string{
+			"help":    "Ця команда виводить перелік команд які приймає Kbot",
+			"version": "Показує версію програми Kbot",
+			"hello":   "поверне вітальне значення",
+			"ping":    "pong",
+			// Додайте сюди інші команди за потреби
+		}
 
 		kbot, err := telebot.NewBot(telebot.Settings{
 			URL:    "",
@@ -42,18 +50,48 @@ to quickly create a Cobra application.`,
 			log.Fatalf("Please check TELE_TOKEN env variable. %s", err)
 			return
 		}
+		kbot.Handle("/start", func(ctx telebot.Context) error {
+			log.Printf("Отримано команду /start від %s", ctx.Sender().Username)
+			replyMessage := fmt.Sprintf("Привіт, %s! Я простий бот на Telebot. Напиши /help, щоб побачити список команд.", ctx.Sender().FirstName)
+			return ctx.Send(replyMessage)
+		})
+		kbot.Handle("/hello", func(ctx telebot.Context) error {
+			senderUsername := ctx.Sender().Username
+			senderFirstName := ctx.Sender().FirstName
+			log.Printf("Отримано команду /hello від %s (%s)", senderFirstName, senderUsername)
+			replyMessage := fmt.Sprintf("Привіт, %s! Радий тебе бачити. Як справи?", senderFirstName)
+			return ctx.Send(replyMessage)
+		})
+		kbot.Handle("/help", func(ctx telebot.Context) error {
+			log.Printf("Отримано команду /help від %s", ctx.Sender().Username)
 
-		kbot.Handle(telebot.OnText, func(m telebot.Context) error {
+			var helpMessage strings.Builder // Використовуємо strings.Builder для ефективної конкатенації рядків
+			helpMessage.WriteString("Ось список доступних команд:\n\n")
 
-			log.Print(m.Message().Payload, m.Text())
-			payload := m.Message().Payload
-
-			switch payload {
-			case "hello":
-				err = m.Send(fmt.Sprintf("Hello -_- !! I`m Kbot %s!!", appVersion))
+			for command, description := range commands {
+				helpMessage.WriteString(fmt.Sprintf("/%s - %s\n", command, description))
 			}
 
-			return err
+			// Надсилаємо сформоване повідомлення
+			return ctx.Send(helpMessage.String())
+		})
+		kbot.Handle("/version", func(ctx telebot.Context) error {
+			log.Printf("Отримано команду /version від %s", ctx.Sender().Username)
+			var versionRepy strings.Builder
+			versionRepy.WriteString(fmt.Sprintf("Поточна версія програми kbot: %s", appVersion))
+
+			return ctx.Send(versionRepy.String())
+		})
+		kbot.Handle("/ping", func(ctx telebot.Context) error {
+			log.Printf("Отримано команду /ping від %s", ctx.Sender().Username)
+			if response, ok := commands["ping"]; ok {
+				return ctx.Send(response)
+			}
+			return ctx.Send("Щось пішло не так з командою ping.")
+		})
+		kbot.Handle(telebot.OnText, func(ctx telebot.Context) error {
+			log.Printf("Отримано текст '%s' від %s", ctx.Text(), ctx.Sender().Username)
+			return ctx.Send(fmt.Sprintf("Ви написали: '%s'. Спробуйте /help для списку команд.", ctx.Text()))
 		})
 
 		kbot.Start()
