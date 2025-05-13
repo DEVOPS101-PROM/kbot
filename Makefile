@@ -79,6 +79,8 @@ macos: darwin/amd64
 test:
 	@echo "Running Go tests..."
 	$(GO) test -v ./...
+image: install-dep linux/amd64
+	WITHDOCKER = true
 
 docker-push:
 	@echo "Pushing Docker image to registry..."
