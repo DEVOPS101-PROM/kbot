@@ -36,16 +36,17 @@ COPY . .
 
 # Виконання цілі Makefile для вказаної TARGETOS/TARGETARCH.
 # Makefile визначає цілі у форматі 'linux/amd64', 'windows/arm64' тощо.
-RUN echo "Запуск компіляції kbot для ${TARGETOS}/${TARGETARCH} за допомогою Makefile..." && \
-    echo "Платформа збірки (BUILDPLATFORM): ${BUILDPLATFORM}" && \
-    echo "Цільова платформа (TARGETPLATFORM): ${TARGETPLATFORM}" && \
-    make "${TARGETOS}/${TARGETARCH}" && \
-    echo "Компіляцію завершено. Вміст директорії /app/bin/:" && \
-    ls -lA /app/bin/
+RUN echo "Запуск компіляції kbot для ${TARGETOS}/${TARGETARCH} за допомогою Makefile...\n" && \
+    echo "Платформа збірки (BUILDPLATFORM): ${BUILDPLATFORM}\n" && \
+    echo "Цільова платформа (TARGETPLATFORM): ${TARGETPLATFORM}\n" 
 
+RUN CGO_ENABLE=0 GOOS=$(TARGETOS) GOARCH=$(TARGETARCH) go build -v -o bin/kbot -ldflags "-X="github.dev/DEVOPS101-PROM/kbot/cmd.appVersion=${VERSION}
+
+RUN echo "Компіляцію завершено. Вміст директорії /app/bin/:"
 # --- Етап Фінального Образу для Linux ---
 # Використовуємо легкий образ Alpine Linux для мінімального розміру фінального образу.
 # FROM alpine:3.19 AS final_linux
+
 FROM scratch AS  final_linux
 # Аргумент TARGETOS потрібен для умовного виконання (хоча buildx обробляє вибір шляху)
 ARG TARGETOS

@@ -3,11 +3,18 @@
 # Go parameters
 GO      := go
 GO_VERSION_REQ := 1.22
+GO_INSTALL_VERSION := 1.24.3 # Конкретна версія Go для завантаження, якщо системний Go не знайдено/застарілий
+GO_LOCAL_INSTALL_DIR := $(PWD)/.go_install # Директорія для локальної інсталяції Go
+GO_LOCAL_BIN := $(GO_LOCAL_INSTALL_DIR)/go/bin/go
+GO_EXT := .tar.gz
+
 # Go LDFLAGS to strip debug symbols and DWARF info, reducing binary size.
 WITHDOCKER ?= false
 REPO	:= github.dev/devops101-prom
+
 VERSION=$(shell git describe --tags --abbrev=0)-$(shell git rev-parse --short HEAD)
 LDFLAGS := "-s -w  -X=github.dev/DEVOPS101-PROM/kbot/cmd.appVersion=${VERSION}"
+
 APP_NAME   := kbot
 OUTPUT_DIR := ./bin
 
@@ -40,17 +47,19 @@ $(OUTPUT_DIR):
 # Generic build rule template for Go binaries
 # $(1) = OS, $(2) = ARCH
 define GO_BUILD_template
-$(1)/$(2): $$(OUTPUT_DIR) install-dep
-	@echo "Building $(APP_NAME) for $(1)/$(2)..."
-	@GOOS=$(1) GOARCH=$(2) CGO_ENABLED=0 $(GO) build -ldflags=$(LDFLAGS) -o $(OUTPUT_DIR)/$(APP_NAME)-$(1)-$(2)$(if $(filter windows,$(1)),.exe) .
-	@if [ "$(WITHDOCKER)" = "true" ]; then \
-		echo "Building Docker image for $(1)/$(2)..." ; \
-		docker buildx build -f Dockerfile.mk --platform=$(1)/$(2) --build-arg TARGETOS=$(1) --build-arg TARGETARCH=$(2) -t $(REPO)/$(APP_NAME):$(VERSION).$(1)-$(2) . --load ; \
-		echo "imge: $(REPO)/$(APP_NAME):$(VERSION).$(1)-$(2)"; \
-	else \
-		echo "Docker build skipped."; \
-	fi
-	@echo "Build for $(1)/$(2) complete." 
+$(1)/$(2): $$(OUTPUT_DIR)
+	@echo "Building Docker image for $(1)/$(2)..." ; \
+	docker buildx build -f Dockerfile.builder --build-arg TARGETOS=$(1) --build-arg TARGETARCH=$(2) -t $(APP_NAME):$(VERSION) . --load ; \
+
+	@echo "imge: $(APP_NAME):$(VERSION) for platform $(1)-$(2) build success"; \
+	# @echo "Extract target artifact to local" $(OUTPUT_DIR); \
+	
+	docker create --name $(APP_NAME) $(APP_NAME):$(VERSION); \
+	docker cp $(APP_NAME):/app/bin/$(APP_NAME) $(OUTPUT_DIR)/$(APP_NAME)-$(1)-$(2) ; \
+	docker rm -f $(APP_NAME) ; \
+	
+	@echo "Extract target artifact to local $(OUTPUT_DIR) success"; \
+
 endef
 # .$(1)-$(2)
 #	@GOOS=$(1) GOARCH=$(2) CGO_ENABLED=0 $(GO) build -ldflags=$(LDFLAGS) -o $(OUTPUT_DIR)/$(APP_NAME)-$(1)-$(2)$(if $(filter windows,$(1)),.exe) .
@@ -60,49 +69,19 @@ endef
 # Instantiate the generic build rule for each target platform
 $(foreach pair,$(TARGET_PLATFORMS),$(eval $(call GO_BUILD_template,$(firstword $(subst /, ,$(pair))),$(lastword $(subst /, ,$(pair))))))
 
-# Check Go version
-check-go-version:
-	@echo "Перевірка версії Go (необхідна >= $(GO_VERSION_REQ).x)..."
-	@GO_INSTALLED=$$(command -v go) ;\
-	if [ -z "$$GO_INSTALLED" ]; then \
-		echo "Помилка: Go не встановлено. Будь ласка, встановіть Go версії $(GO_VERSION_REQ).x або новішу." ;\
-		echo "Інструкції з встановлення: https://golang.org/doc/install" ;\
-		exit 1 ;\
-	fi
-	GO_VERSION_OUTPUT=$$(go version) ;\
-	CURRENT_GO_VERSION_FULL=$$(echo "$$GO_VERSION_OUTPUT" | awk '{print $$3}') ;\
-	CURRENT_GO_VERSION=$$(echo "$$CURRENT_GO_VERSION_FULL" | sed 's/go//') ;\
-	MIN_VERSION_MAJOR=$$(echo "$(GO_VERSION_REQ)" | cut -d. -f1) ;\
-	MIN_VERSION_MINOR=$$(echo "$(GO_VERSION_REQ)" | cut -d. -f2) ;\
-	CURRENT_VERSION_MAJOR=$$(echo "$$CURRENT_GO_VERSION" | cut -d. -f1) ;\
-	CURRENT_VERSION_MINOR=$$(echo "$$CURRENT_GO_VERSION" | cut -d. -f2) ;\
-	if [ -z "$$CURRENT_VERSION_MAJOR" ] || [ -z "$$CURRENT_VERSION_MINOR" ]; then \
-		echo "Помилка: Не вдалося визначити поточну версію Go з рядка '$$GO_VERSION_OUTPUT'." ;\
-		exit 1 ;\
-	fi ;\
-	if [ "$$CURRENT_VERSION_MAJOR" -lt "$$MIN_VERSION_MAJOR" ] || \
-	   ( [ "$$CURRENT_VERSION_MAJOR" -eq "$$MIN_VERSION_MAJOR" ] && \
-	     [ "$$CURRENT_VERSION_MINOR" -lt "$$MIN_VERSION_MINOR" ] ); then \
-		echo "Помилка: Поточна версія Go ($$CURRENT_GO_VERSION) нижча за необхідну версію $(GO_VERSION_REQ).x." ;\
-		echo "Будь ласка, оновіть Go. Інструкції: https://golang.org/doc/install" ;\
-		exit 1 ;\
-	else \
-		echo "Версія Go ($$CURRENT_GO_VERSION) відповідає вимогам (>= $(GO_VERSION_REQ).x)." ;\
-	fi
 # Install GO dependencies 
-install-dep: check-go-version
-	go get
+
 # Alias targets for convenience
 
 # 'make linux' will build for linux-amd64
-linux: install-dep linux/amd64
+linux:  linux/amd64
 	@echo "Alias 'linux' ensured linux/amd64 build."
 # 'make linux/amd64' will build for linux/amd64
 arm: linux/arm64
 	@echo "Alias 'arm' ensured linux/arm64 build."
 windows: windows/amd64
 	@echo "Alias 'windows' ensured windows/amd64 build."
-macos: darwin/amd64
+macos: darwin/arm64
 	@echo "Alias 'macos' ensured darwin/amd64 build."
 
 # Target to run Go tests
@@ -110,12 +89,38 @@ test:
 	@echo "Running Go tests..."
 	$(GO) test -v ./...
 
-image: install-dep linux/amd64
-	WITHDOCKER = true
+image: 
+	@echo "Alias 'image' ensured linux/amd64 image build."; \
+
+	@echo "Building Docker image for linux/amd64 ..." ; \
+	docker buildx build -f Dockerfile --build-arg TARGETOS="linux" --build-arg TARGETARCH="amd64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
+
+	@echo "imge: $(REPO)/$(APP_NAME):$(VERSION) for platform linux-amd64 build success"; \
+
+image-arm:
+	@echo "Alias 'image-arm' ensured linux/arm64 image build."
+	@echo "Building Docker image for linux/arm64 ..." ; \
+	docker buildx build -f Dockerfile --build-arg TARGETOS="linux" --build-arg TARGETARCH="arm64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
+
+	@echo "imge: $(REPO)/$(APP_NAME):$(VERSION) for platform linux-arm64 build success"; \
+
+image-macos:
+	@echo "Alias 'image-macos' ensured darwin/arm64 image build."
+	@echo "Building Docker image for darwin/arm64 ..." ; \
+	docker buildx build -f Dockerfile --build-arg TARGETOS="darwin" --build-arg TARGETARCH="arm64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
+
+	@echo "imge: $(REPO)/$(APP_NAME):$(VERSION) for platform darwin-arm64 build success"; \
+
+image-windows:
+	@echo "Alias 'image-windows' ensured windows/amd64 image build."
+	@echo "Building Docker image for windows/amd64 ..." ; \
+	docker buildx build -f Dockerfile --build-arg TARGETOS="windows" --build-arg TARGETARCH="amd64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
+
+	@echo "imge: $(REPO)/$(APP_NAME):$(VERSION) for platform windows-amd64 build success"; \	
 
 docker-push:
 	@echo "Pushing Docker image to registry..."
-	@docker push $(APP_NAME):$(VERSION).$(1)-$(2)
+	@docker push $(REPO)/$(APP_NAME):$(VERSION)
 	@echo "Docker image pushed."
 # Target to clean up build artifacts
 clean:
@@ -128,5 +133,4 @@ clean:
 	fi
 
 # Declare phony targets (targets that are not files)
-.PHONY: all test clean linux arm macos windows $(patsubst %,build-%,$(TARGET_PLATFORMS))
-
+.PHONY: all test clean linux arm macos windows $(patsubst %,build-%,$(TARGET_PLATFORMS)) ;\
