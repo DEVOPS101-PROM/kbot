@@ -2,6 +2,7 @@
 
 # Go parameters
 GO      := go
+GO_VERSION_REQ := 1.22
 # Go LDFLAGS to strip debug symbols and DWARF info, reducing binary size.
 WITHDOCKER ?= false
 REPO	:= github.dev/devops101-prom
@@ -59,8 +60,37 @@ endef
 # Instantiate the generic build rule for each target platform
 $(foreach pair,$(TARGET_PLATFORMS),$(eval $(call GO_BUILD_template,$(firstword $(subst /, ,$(pair))),$(lastword $(subst /, ,$(pair))))))
 
+# Check Go version
+check-go-version:
+	@echo "Перевірка версії Go (необхідна >= $(GO_VERSION_REQ).x)..."
+	@GO_INSTALLED=$$(command -v go) ;\
+	if [ -z "$$GO_INSTALLED" ]; then \
+		echo "Помилка: Go не встановлено. Будь ласка, встановіть Go версії $(GO_VERSION_REQ).x або новішу." ;\
+		echo "Інструкції з встановлення: https://golang.org/doc/install" ;\
+		exit 1 ;\
+	fi
+	GO_VERSION_OUTPUT=$$(go version) ;\
+	CURRENT_GO_VERSION_FULL=$$(echo "$$GO_VERSION_OUTPUT" | awk '{print $$3}') ;\
+	CURRENT_GO_VERSION=$$(echo "$$CURRENT_GO_VERSION_FULL" | sed 's/go//') ;\
+	MIN_VERSION_MAJOR=$$(echo "$(GO_VERSION_REQ)" | cut -d. -f1) ;\
+	MIN_VERSION_MINOR=$$(echo "$(GO_VERSION_REQ)" | cut -d. -f2) ;\
+	CURRENT_VERSION_MAJOR=$$(echo "$$CURRENT_GO_VERSION" | cut -d. -f1) ;\
+	CURRENT_VERSION_MINOR=$$(echo "$$CURRENT_GO_VERSION" | cut -d. -f2) ;\
+	if [ -z "$$CURRENT_VERSION_MAJOR" ] || [ -z "$$CURRENT_VERSION_MINOR" ]; then \
+		echo "Помилка: Не вдалося визначити поточну версію Go з рядка '$$GO_VERSION_OUTPUT'." ;\
+		exit 1 ;\
+	fi ;\
+	if [ "$$CURRENT_VERSION_MAJOR" -lt "$$MIN_VERSION_MAJOR" ] || \
+	   ( [ "$$CURRENT_VERSION_MAJOR" -eq "$$MIN_VERSION_MAJOR" ] && \
+	     [ "$$CURRENT_VERSION_MINOR" -lt "$$MIN_VERSION_MINOR" ] ); then \
+		echo "Помилка: Поточна версія Go ($$CURRENT_GO_VERSION) нижча за необхідну версію $(GO_VERSION_REQ).x." ;\
+		echo "Будь ласка, оновіть Go. Інструкції: https://golang.org/doc/install" ;\
+		exit 1 ;\
+	else \
+		echo "Версія Go ($$CURRENT_GO_VERSION) відповідає вимогам (>= $(GO_VERSION_REQ).x)." ;\
+	fi
 # Install GO dependencies 
-install-dep: 
+install-dep: check-go-version
 	go get
 # Alias targets for convenience
 
@@ -79,6 +109,7 @@ macos: darwin/amd64
 test:
 	@echo "Running Go tests..."
 	$(GO) test -v ./...
+
 image: install-dep linux/amd64
 	WITHDOCKER = true
 
