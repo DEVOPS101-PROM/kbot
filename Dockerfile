@@ -22,7 +22,7 @@ WORKDIR /app
 
 # Копіювання Makefile, go.mod та go.sum для використання кешу Docker
 # Якщо ці файли не змінилися, Docker може пропустити повторне завантаження залежностей.
-COPY Makefile ./Makefile
+
 COPY go.mod go.sum ./
 
 # Завантаження Go модулів. Цей крок тут допомагає кешуванню Docker.

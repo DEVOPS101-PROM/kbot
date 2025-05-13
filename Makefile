@@ -7,6 +7,8 @@ GO_INSTALL_VERSION := 1.24.3 # Конкретна версія Go для зав�
 GO_LOCAL_INSTALL_DIR := $(PWD)/.go_install # Директорія для локальної інсталяції Go
 GO_LOCAL_BIN := $(GO_LOCAL_INSTALL_DIR)/go/bin/go
 GO_EXT := .tar.gz
+CURR_OS := $(shell uname -s)
+CURR_ARCH := $(shell uname -m)
 
 # Go LDFLAGS to strip debug symbols and DWARF info, reducing binary size.
 WITHDOCKER ?= false
@@ -49,11 +51,10 @@ $(OUTPUT_DIR):
 define GO_BUILD_template
 $(1)/$(2): $$(OUTPUT_DIR)
 	@echo "Building Docker image for $(1)/$(2)..." ; \
-	docker buildx build -f Dockerfile.builder --build-arg TARGETOS=$(1) --build-arg TARGETARCH=$(2) -t $(APP_NAME):$(VERSION) . --load ; \
+	docker buildx build --platform=$(CURR_OS)/$(CURR_ARCH) -f Dockerfile.builder --build-arg TARGETOS=$(1) --build-arg TARGETARCH=$(2) -t $(APP_NAME):$(VERSION) . --load ; \
 
 	@echo "imge: $(APP_NAME):$(VERSION) for platform $(1)-$(2) build success"; \
-	# @echo "Extract target artifact to local" $(OUTPUT_DIR); \
-	
+
 	docker create --name $(APP_NAME) $(APP_NAME):$(VERSION); \
 	docker cp $(APP_NAME):/app/bin/$(APP_NAME) $(OUTPUT_DIR)/$(APP_NAME)-$(1)-$(2) ; \
 	docker rm -f $(APP_NAME) ; \
@@ -89,32 +90,31 @@ test:
 	@echo "Running Go tests..."
 	$(GO) test -v ./...
 
-image: 
-	@echo "Alias 'image' ensured linux/amd64 image build."; \
-
+image:
+	@echo "Alias 'image' ensured linux/amd image build."
 	@echo "Building Docker image for linux/amd64 ..." ; \
-	docker buildx build -f Dockerfile --build-arg TARGETOS="linux" --build-arg TARGETARCH="amd64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
+	docker buildx build --platform=$(CURR_OS)/$(CURR_ARCH) -f Dockerfile --build-arg TARGETOS="linux" --build-arg TARGETARCH="amd64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
 
-	@echo "imge: $(REPO)/$(APP_NAME):$(VERSION) for platform linux-amd64 build success"; \
+	@echo "imge: $(REPO)/$(APP_NAME):$(VERSION) for platform linux-and64 build success"; \
 
 image-arm:
 	@echo "Alias 'image-arm' ensured linux/arm64 image build."
 	@echo "Building Docker image for linux/arm64 ..." ; \
-	docker buildx build -f Dockerfile --build-arg TARGETOS="linux" --build-arg TARGETARCH="arm64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
+	docker buildx build --platform=$(CURR_OS)/$(CURR_ARCH) -f Dockerfile --build-arg TARGETOS="linux" --build-arg TARGETARCH="arm64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
 
 	@echo "imge: $(REPO)/$(APP_NAME):$(VERSION) for platform linux-arm64 build success"; \
 
 image-macos:
 	@echo "Alias 'image-macos' ensured darwin/arm64 image build."
 	@echo "Building Docker image for darwin/arm64 ..." ; \
-	docker buildx build -f Dockerfile --build-arg TARGETOS="darwin" --build-arg TARGETARCH="arm64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
+	docker buildx build --platform=$(CURR_OS)/$(CURR_ARCH) -f Dockerfile --build-arg TARGETOS="darwin" --build-arg TARGETARCH="arm64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
 
 	@echo "imge: $(REPO)/$(APP_NAME):$(VERSION) for platform darwin-arm64 build success"; \
 
 image-windows:
 	@echo "Alias 'image-windows' ensured windows/amd64 image build."
 	@echo "Building Docker image for windows/amd64 ..." ; \
-	docker buildx build -f Dockerfile --build-arg TARGETOS="windows" --build-arg TARGETARCH="amd64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
+	docker buildx build --platform=$(CURR_OS)/$(CURR_ARCH) -f Dockerfile --build-arg TARGETOS="windows" --build-arg TARGETARCH="amd64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
 
 	@echo "imge: $(REPO)/$(APP_NAME):$(VERSION) for platform windows-amd64 build success"; \	
 
