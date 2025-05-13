@@ -4,7 +4,7 @@
 GO      := go
 # Go LDFLAGS to strip debug symbols and DWARF info, reducing binary size.
 WITHDOCKER ?= false
-REPO	:= github.dev/DEVOPS101-PROM
+REPO	:= github.dev/devops101-prom
 VERSION=$(shell git describe --tags --abbrev=0)-$(shell git rev-parse --short HEAD)
 LDFLAGS := "-s -w  -X=github.dev/DEVOPS101-PROM/kbot/cmd.appVersion=${VERSION}"
 APP_NAME   := kbot
@@ -39,15 +39,19 @@ $(OUTPUT_DIR):
 # Generic build rule template for Go binaries
 # $(1) = OS, $(2) = ARCH
 define GO_BUILD_template
-$(1)/$(2): $$(OUTPUT_DIR) clean install-dep
+$(1)/$(2): $$(OUTPUT_DIR) install-dep
 	@echo "Building $(APP_NAME) for $(1)/$(2)..."
-	@GOOS=$(1) GOARCH=$(2) CGO_ENABLED=0 $(GO) build -ldflags=$(LDFLAGS) -o $(OUTPUT_DIR)/$(APP_NAME)$(if $(filter windows,$(1)),.exe) .
-	ifeq "$(WITHDOCKER)" "true" ; then \
+	@GOOS=$(1) GOARCH=$(2) CGO_ENABLED=0 $(GO) build -ldflags=$(LDFLAGS) -o $(OUTPUT_DIR)/$(APP_NAME)-$(1)-$(2)$(if $(filter windows,$(1)),.exe) .
+	@if [ "$(WITHDOCKER)" = "true" ]; then \
 		echo "Building Docker image for $(1)/$(2)..." ; \
-		docker build --platform=$(1)/$(2) -t $(REPO)/$(APP_NAME):$(VERSION).$(1)-$(2). . ; \
+		docker buildx build -f Dockerfile.mk --platform=$(1)/$(2) --build-arg TARGETOS=$(1) --build-arg TARGETARCH=$(2) -t $(REPO)/$(APP_NAME):$(VERSION).$(1)-$(2) . --load ; \
+		echo "imge: $(REPO)/$(APP_NAME):$(VERSION).$(1)-$(2)"; \
+	else \
+		echo "Docker build skipped."; \
 	fi
 	@echo "Build for $(1)/$(2) complete." 
 endef
+# .$(1)-$(2)
 #	@GOOS=$(1) GOARCH=$(2) CGO_ENABLED=0 $(GO) build -ldflags=$(LDFLAGS) -o $(OUTPUT_DIR)/$(APP_NAME)-$(1)-$(2)$(if $(filter windows,$(1)),.exe) .
 # Phony target 'build-all' to build all defined target platforms
 # build-all: $(patsubst %,build-%,$(TARGET_PLATFORMS))
@@ -61,7 +65,7 @@ install-dep:
 # Alias targets for convenience
 
 # 'make linux' will build for linux-amd64
-linux: clean install-dep linux/amd64
+linux: install-dep linux/amd64
 	@echo "Alias 'linux' ensured linux/amd64 build."
 # 'make linux/amd64' will build for linux/amd64
 arm: linux/arm64
@@ -83,9 +87,12 @@ docker-push:
 # Target to clean up build artifacts
 clean:
 	@echo "Cleaning up build artifacts..."
-	@rm -rf $(OUTPUT_DIR)
-	@docker rmi $(APP_NAME):$(VERSION).$(1)-$(2)
-
+	@rm -rf $(OUTPUT_DIR) || true
+	@if [ "$(IMG-RM)" = "true" ]; then \
+		echo "RM Docker image $(REPO)/$(APP_NAME):$(VERSION)" ; \
+		docker image ls $(REPO)/$(APP_NAME):$(VERSION)* -aq ; \
+		docker rmi -f $$(docker image ls $(REPO)/$(APP_NAME):$(VERSION)* -aq ) || true; \
+	fi
 
 # Declare phony targets (targets that are not files)
 .PHONY: all test clean linux arm macos windows $(patsubst %,build-%,$(TARGET_PLATFORMS))
