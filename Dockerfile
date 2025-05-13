@@ -5,7 +5,7 @@
 # --- Етап Збирача (Builder) ---
 # Використовуємо офіційний образ golang з Alpine для компіляції.
 # Alpine містить 'make' за замовчуванням.
-FROM quay.io/projectquay/golang:1.24 AS builder
+FROM --platform=$BUILDPLATFORM quay.io/projectquay/golang:1.24 AS builder
 
 # Аргументи, що автоматично надаються 'docker buildx build'
 # BUILDPLATFORM: Платформа, на якій фактично виконується цей етап збірки (наприклад, linux/amd64).
@@ -63,6 +63,22 @@ COPY --from=builder /etc/ssl/certs/* /etc/ssl/certs/
 # Встановлення точки входу для запуску бота
 ENTRYPOINT ["./kbot"]
 
+FROM scratch AS  final_darwin
+# Аргумент TARGETOS потрібен для умовного виконання (хоча buildx обробляє вибір шляху)
+ARG TARGETOS
+
+# Встановлення робочої директорії
+WORKDIR /
+
+# Копіювання скомпільованого бінарного файлу 'kbot' з етапу збирача.
+# Makefile створює 'bin/kbot' для Linux.
+COPY --from=builder /app/bin/kbot .
+COPY --from=builder /etc/ssl/certs/* /etc/ssl/certs/
+# Надання прав на виконання бінарному файлу
+# RUN chmod +x kbot
+
+# Встановлення точки входу для запуску бота
+ENTRYPOINT ["./kbot"]
 # --- Етап Фінального Образу для Windows ---
 # Використовуємо образ Windows Nano Server.
 # Цей етап буде ефективно використаний, якщо ви збираєте для платформи Windows
