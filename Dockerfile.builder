@@ -16,6 +16,7 @@ ARG BUILDPLATFORM
 ARG TARGETPLATFORM
 ARG TARGETOS
 ARG TARGETARCH
+ARG VERSION
 
 # Встановлення робочої директорії всередині контейнера збирача
 WORKDIR /app

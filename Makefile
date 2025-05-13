@@ -51,7 +51,7 @@ $(OUTPUT_DIR):
 define GO_BUILD_template
 $(1)/$(2): $$(OUTPUT_DIR)
 	@echo "Building Docker image for $(1)/$(2)..." ; \
-	docker buildx build --platform=$(CURR_OS)/$(CURR_ARCH) -f Dockerfile.builder --build-arg TARGETOS=$(1) --build-arg TARGETARCH=$(2) -t $(APP_NAME):$(VERSION) . --load ; \
+	docker buildx build --platform=$(CURR_OS)/$(CURR_ARCH) -f Dockerfile.builder --build-arg TARGETOS=$(1) --build-arg TARGETARCH=$(2) --build-arg VERSION=$(VERSION) -t $(APP_NAME):$(VERSION) . --load ; \
 
 	@echo "imge: $(APP_NAME):$(VERSION) for platform $(1)-$(2) build success"; \
 
