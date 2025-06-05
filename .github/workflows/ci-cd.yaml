@@ -17,8 +17,6 @@ jobs:
       contents: write
       packages: write
     steps:
-      - name: Log in to ghcr.io
-        run: echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -30,7 +28,7 @@ jobs:
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          password: ${{ secrets.CR_PAT }}
       - name: Get version and commit
         id: version
         run: |
@@ -51,6 +49,8 @@ jobs:
           cache-to: type=gha,mode=max
           provenance: true
           sbom: true
+          build-args: |
+            BUILDKIT_INLINE_CACHE=1
       - name: Update Helm chart version
         run: |
           VERSION=$(git describe --tags --abbrev=0)
