@@ -7,11 +7,14 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+permissions:
+  contents: write
+  packages: write
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       packages: write
     steps:
       - name: Checkout repository
@@ -26,24 +29,24 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Extract metadata for Docker
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=pr
-            type=semver,pattern={{version}}
-            type=sha,format=short
+      - name: Get version and commit
+        id: version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0)
+          COMMIT=$(git rev-parse --short HEAD)
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "COMMIT=${COMMIT}" >> $GITHUB_OUTPUT
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
           push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          tags: |
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}-amd64
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}-arm64
           platforms: linux/amd64,linux/arm64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
       - name: Update Helm chart version
         run: |
           VERSION=$(git describe --tags --abbrev=0)
@@ -74,4 +77,7 @@ jobs:
           # Add actual deployment verification logic here
           sleep 30
       - name: Test bot functionality
-        run: "echo \"Testing bot functionality...\"\n# Add actual bot testing logic here\n# This could include sending test messages and verifying responses "
+        run: |
+          echo "Testing bot functionality..."
+          # Add actual bot testing logic here
+          # This could include sending test messages and verifying responses
