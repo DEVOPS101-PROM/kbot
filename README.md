@@ -280,3 +280,106 @@ kbot vX.Y.Z started
 
 * `kbot` (або `start`): Основна команда для запуску Telegram-бота.
 
+# Telegram Bot with CI/CD Pipeline
+
+This project implements a Telegram bot with a complete CI/CD pipeline using GitHub Actions, Docker, and ArgoCD.
+
+## CI/CD Pipeline
+
+```mermaid
+graph TD
+    A[Developer Push] -->|Push to develop| B[GitHub Actions]
+    B -->|Build| C[Build Docker Image]
+    C -->|Push| D[GHCR Registry]
+    B -->|Update| E[Update Helm Chart]
+    E -->|Commit| F[Git Repository]
+    F -->|Sync| G[ArgoCD]
+    G -->|Deploy| H[Kubernetes Cluster]
+    H -->|Verify| I[Bot Testing]
+    I -->|Success| J[Deployment Complete]
+    I -->|Failure| K[Rollback]
+```
+
+## Pipeline Components
+
+1. **GitHub Actions Workflow**
+   - Triggers on push to develop branch
+   - Builds multi-arch Docker images
+   - Pushes to GitHub Container Registry
+   - Updates Helm chart version
+   - Triggers ArgoCD sync
+
+2. **Docker Image**
+   - Multi-arch support (amd64, arm64)
+   - Versioned with git tags and commit hashes
+   - Stored in GitHub Container Registry
+
+3. **Helm Chart**
+   - Automated version updates
+   - Configurable through values.yaml
+   - Deployed via ArgoCD
+
+4. **ArgoCD**
+   - Automated sync on changes
+   - Self-healing capabilities
+   - Health monitoring
+
+## Getting Started
+
+1. Clone the repository:
+   ```bash
+   git clone https://github.com/DEVOPS101-PROM/kbot.git
+   cd kbot
+   ```
+
+2. Set up your Telegram bot token:
+   ```bash
+   # Update values.yaml with your token
+   helm upgrade --install kbot ./helm/kbot \
+     --set telegram.token=your-token
+   ```
+
+3. Deploy using ArgoCD:
+   ```bash
+   kubectl apply -f argocd/kbot-app.yaml
+   ```
+
+## Development
+
+1. Create a new branch from develop:
+   ```bash
+   git checkout -b feature/your-feature develop
+   ```
+
+2. Make your changes and commit:
+   ```bash
+   git add .
+   git commit -m "Your commit message"
+   git push origin feature/your-feature
+   ```
+
+3. Create a pull request to develop branch
+
+## CI/CD Process
+
+1. Push to develop branch triggers workflow
+2. GitHub Actions builds and pushes Docker image
+3. Helm chart version is updated automatically
+4. ArgoCD detects changes and syncs deployment
+5. Bot is tested automatically
+6. Deployment is verified
+
+## Monitoring
+
+- ArgoCD dashboard for deployment status
+- Kubernetes dashboard for pod status
+- Bot functionality testing after deployment
+
+## Contributing
+
+1. Fork the repository
+2. Create your feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
+

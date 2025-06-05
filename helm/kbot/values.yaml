@@ -1,0 +1,17 @@
+image:
+  registry: "ghcr.io"
+  repository: "devops101-prom/kbot"
+  tag: "v1.0.15-106879e"
+  pullPolicy: IfNotPresent
+  os: linux
+  arch: amd64
+# Telegram token
+telegram:
+  token: "" # Add your Telegram token here
+# Pod configuration
+podAnnotations: {}
+podLabels: {}
+# Security context
+securityContext: {}
+# Image pull secrets
+imagePullSecrets: []

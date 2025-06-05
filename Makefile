@@ -3,134 +3,95 @@
 # Go parameters
 GO      := go
 GO_VERSION_REQ := 1.22
-GO_INSTALL_VERSION := 1.24.3 # Конкретна версія Go для завантаження, якщо системний Go не знайдено/застарілий
-GO_LOCAL_INSTALL_DIR := $(PWD)/.go_install # Директорія для локальної інсталяції Go
+GO_INSTALL_VERSION := 1.24.3
+GO_LOCAL_INSTALL_DIR := $(PWD)/.go_install
 GO_LOCAL_BIN := $(GO_LOCAL_INSTALL_DIR)/go/bin/go
 GO_EXT := .tar.gz
 CURR_OS := $(shell uname -s)
 CURR_ARCH := $(shell uname -m)
 
-# Go LDFLAGS to strip debug symbols and DWARF info, reducing binary size.
-WITHDOCKER ?= false
-REPO	:= github.dev/devops101-prom
+# Architecture conversion
+ARCH := $(shell if [ "$(CURR_ARCH)" = "x86_64" ]; then echo "amd64"; else echo "$(CURR_ARCH)"; fi)
 
-VERSION=$(shell git describe --tags --abbrev=0)-$(shell git rev-parse --short HEAD)
-LDFLAGS := "-s -w  -X=github.dev/DEVOPS101-PROM/kbot/cmd.appVersion=${VERSION}"
+# Container runtime selection
+CONTAINER_RUNTIME ?= docker
+ifeq ($(CONTAINER_RUNTIME),podman)
+    RUNTIME := podman
+    BUILDX := build
+else
+    RUNTIME := docker
+    BUILDX := buildx build
+endif
 
-APP_NAME   := kbot
-OUTPUT_DIR := ./bin
+# Docker parameters
+REPO := ghcr.io/devops101-prom
+APP_NAME := kbot
+VERSION := $(shell git describe --tags --abbrev=0)-$(shell git rev-parse --short HEAD)
 
-# Default target when 'make' is run without arguments
-.DEFAULT_GOAL := all
+# Default target
+.DEFAULT_GOAL := help
 
-# Define all target OS/Arch combinations
-# Format: <os>-<arch>
-TARGET_PLATFORMS := \
-	linux/amd64 \
-	linux/arm64 \
-	darwin/amd64 \
-	darwin/arm64 \
-	windows/amd64 \
-	windows/arm64
+# Help target
+help:
+	@echo "Available targets:"
+	@echo "  image        - Build container image for current architecture"
+	@echo "  image-arm    - Build container image for ARM64"
+	@echo "  image-amd64  - Build container image for AMD64"
+	@echo "  push         - Push container image to registry"
+	@echo "  clean        - Clean up build artifacts and images"
+	@echo ""
+	@echo "Container runtime can be selected using CONTAINER_RUNTIME variable:"
+	@echo "  make image CONTAINER_RUNTIME=docker    # Use Docker (default)"
+	@echo "  make image CONTAINER_RUNTIME=podman    # Use Podman"
 
-all: 
-	@echo "Allowed target OS/Arch combinations:"
-	
-	@for targets in $(TARGET_PLATFORMS) ; do \
-	echo $$targets ; \
-	done
-	@echo "\nRUN ~build-all~ for build all allowed target OS/Arch combinations"
-
-# Rule to create the output directory if it doesn't exist
-$(OUTPUT_DIR):
-	@echo "Creating output directory: $(OUTPUT_DIR)"
-	@mkdir -p $@
-
-# Generic build rule template for Go binaries
-# $(1) = OS, $(2) = ARCH
-define GO_BUILD_template
-$(1)/$(2): $$(OUTPUT_DIR)
-	@echo "Building Docker image for $(1)/$(2)..." ; \
-	docker buildx build --platform=$(CURR_OS)/$(CURR_ARCH) -f Dockerfile.builder --build-arg TARGETOS=$(1) --build-arg TARGETARCH=$(2) -t $(APP_NAME):$(VERSION) . --load ; \
-
-	@echo "imge: $(APP_NAME):$(VERSION) for platform $(1)-$(2) build success"; \
-
-	docker create --name $(APP_NAME) $(APP_NAME):$(VERSION); \
-	docker cp $(APP_NAME):/app/bin/$(APP_NAME) $(OUTPUT_DIR)/$(APP_NAME)-$(1)-$(2) ; \
-	docker rm -f $(APP_NAME) ; \
-	
-	@echo "Extract target artifact to local $(OUTPUT_DIR) success"; \
-
-endef
-# .$(1)-$(2)
-#	@GOOS=$(1) GOARCH=$(2) CGO_ENABLED=0 $(GO) build -ldflags=$(LDFLAGS) -o $(OUTPUT_DIR)/$(APP_NAME)-$(1)-$(2)$(if $(filter windows,$(1)),.exe) .
-# Phony target 'build-all' to build all defined target platforms
-# build-all: $(patsubst %,build-%,$(TARGET_PLATFORMS))
-
-# Instantiate the generic build rule for each target platform
-$(foreach pair,$(TARGET_PLATFORMS),$(eval $(call GO_BUILD_template,$(firstword $(subst /, ,$(pair))),$(lastword $(subst /, ,$(pair))))))
-
-# Install GO dependencies 
-
-# Alias targets for convenience
-
-# 'make linux' will build for linux-amd64
-linux:  linux/amd64
-	@echo "Alias 'linux' ensured linux/amd64 build."
-# 'make linux/amd64' will build for linux/amd64
-arm: linux/arm64
-	@echo "Alias 'arm' ensured linux/arm64 build."
-windows: windows/amd64
-	@echo "Alias 'windows' ensured windows/amd64 build."
-macos: darwin/arm64
-	@echo "Alias 'macos' ensured darwin/amd64 build."
-
-# Target to run Go tests
-test:
-	@echo "Running Go tests..."
-	$(GO) test -v ./...
-
+# Build image for current architecture
 image:
-	@echo "Alias 'image' ensured linux/amd image build."
-	@echo "Building Docker image for linux/amd64 ..." ; \
-	docker buildx build --platform=$(CURR_OS)/$(CURR_ARCH) -f Dockerfile --build-arg TARGETOS="linux" --build-arg TARGETARCH="amd64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
+	@echo "Building container image for $(CURR_OS)/$(ARCH) using $(CONTAINER_RUNTIME)..."
+	$(RUNTIME) $(BUILDX) \
+		--platform=$(CURR_OS)/$(ARCH) \
+		-f Dockerfile \
+		--build-arg TARGETOS="linux" \
+		--build-arg TARGETARCH="$(ARCH)" \
+		-t $(REPO)/$(APP_NAME):$(VERSION)-$(ARCH) \
+		. --load
+	@echo "Image $(REPO)/$(APP_NAME):$(VERSION)-$(ARCH) built successfully"
 
-	@echo "imge: $(REPO)/$(APP_NAME):$(VERSION) for platform linux-and64 build success"; \
-
+# Build image for ARM64
 image-arm:
-	@echo "Alias 'image-arm' ensured linux/arm64 image build."
-	@echo "Building Docker image for linux/arm64 ..." ; \
-	docker buildx build --platform=$(CURR_OS)/$(CURR_ARCH) -f Dockerfile --build-arg TARGETOS="linux" --build-arg TARGETARCH="arm64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
+	@echo "Building container image for linux/arm64 using $(CONTAINER_RUNTIME)..."
+	$(RUNTIME) $(BUILDX) \
+		--platform=$(CURR_OS)/$(ARCH) \
+		-f Dockerfile \
+		--build-arg TARGETOS="linux" \
+		--build-arg TARGETARCH="arm64" \
+		-t $(REPO)/$(APP_NAME):$(VERSION)-arm64 \
+		. --load
+	@echo "Image $(REPO)/$(APP_NAME):$(VERSION)-arm64 built successfully"
 
-	@echo "imge: $(REPO)/$(APP_NAME):$(VERSION) for platform linux-arm64 build success"; \
+# Build image for AMD64
+image-amd64:
+	@echo "Building container image for linux/amd64 using $(CONTAINER_RUNTIME)..."
+	$(RUNTIME) $(BUILDX) \
+		--platform=$(CURR_OS)/$(ARCH) \
+		-f Dockerfile \
+		--build-arg TARGETOS="linux" \
+		--build-arg TARGETARCH="amd64" \
+		-t $(REPO)/$(APP_NAME):$(VERSION)-amd64 \
+		. --load
+	@echo "Image $(REPO)/$(APP_NAME):$(VERSION)-amd64 built successfully"
 
-image-macos:
-	@echo "Alias 'image-macos' ensured darwin/arm64 image build."
-	@echo "Building Docker image for darwin/arm64 ..." ; \
-	docker buildx build --platform=$(CURR_OS)/$(CURR_ARCH) -f Dockerfile --build-arg TARGETOS="darwin" --build-arg TARGETARCH="arm64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
+# Push image to registry
+push:
+	@echo "Pushing container images to registry using $(CONTAINER_RUNTIME)..."
+	$(RUNTIME) push $(REPO)/$(APP_NAME):$(VERSION)-$(ARCH)
+	@echo "Container images pushed successfully"
 
-	@echo "imge: $(REPO)/$(APP_NAME):$(VERSION) for platform darwin-arm64 build success"; \
-
-image-windows:
-	@echo "Alias 'image-windows' ensured windows/amd64 image build."
-	@echo "Building Docker image for windows/amd64 ..." ; \
-	docker buildx build --platform=$(CURR_OS)/$(CURR_ARCH) -f Dockerfile --build-arg TARGETOS="windows" --build-arg TARGETARCH="amd64" -t $(REPO)/$(APP_NAME):$(VERSION) . --load ; \
-
-	@echo "imge: $(REPO)/$(APP_NAME):$(VERSION) for platform windows-amd64 build success"; \	
-
-docker-push:
-	@echo "Pushing Docker image to registry..."
-	@docker push $(REPO)/$(APP_NAME):$(VERSION)
-	@echo "Docker image pushed."
-# Target to clean up build artifacts
+# Clean up
 clean:
-	@echo "Cleaning up build artifacts..."
-	@rm -rf $(OUTPUT_DIR) || true
+	@echo "Cleaning up build artifacts and images..."
 	@if [ "$(IMG-RM)" = "true" ]; then \
-		echo "RM Docker image $(REPO)/$(APP_NAME):$(VERSION)" ; \
-		docker image ls $(REPO)/$(APP_NAME):$(VERSION)* -aq ; \
-		docker rmi -f $$(docker image ls $(REPO)/$(APP_NAME):$(VERSION)* -aq ) || true; \
+		echo "Removing container images for $(REPO)/$(APP_NAME):$(VERSION)*" ; \
+		$(RUNTIME) rmi -f $$($(RUNTIME) image ls $(REPO)/$(APP_NAME):$(VERSION)* -aq) || true; \
 	fi
 
-# Declare phony targets (targets that are not files)
-.PHONY: all test clean linux arm macos windows $(patsubst %,build-%,$(TARGET_PLATFORMS)) ;\
+.PHONY: help image image-arm image-amd64 push clean

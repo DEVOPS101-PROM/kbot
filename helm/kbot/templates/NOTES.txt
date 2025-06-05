@@ -1,0 +1,15 @@
+Thank you for installing {{ .Chart.Name }}.
+
+Your release is named {{ .Release.Name }}.
+
+The Telegram bot has been deployed with the following configuration:
+- Image: {{ .Values.repository }}/{{ .Chart.Name }}:{{ .Values.tag }}-{{ .Values.arch | default "amd64"}}
+- Container port: 8080
+- Pull policy: {{ .Values.pullPolicy }}
+
+To verify the deployment status, run:
+  kubectl get pods -l "app.kubernetes.io/name={{ include "kbot.name" . }}"
+
+Make sure you have set the TELE_TOKEN value in your values.yaml file or provided it during helm install.
+
+For more information about the bot, please check the documentation.

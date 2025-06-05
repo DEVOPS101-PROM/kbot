@@ -40,7 +40,7 @@ RUN echo "Запуск компіляції kbot для ${TARGETOS}/${TARGETARCH
     echo "Платформа збірки (BUILDPLATFORM): ${BUILDPLATFORM}\n" && \
     echo "Цільова платформа (TARGETPLATFORM): ${TARGETPLATFORM}\n" 
 
-RUN CGO_ENABLE=0 GOOS=$(TARGETOS) GOARCH=$(TARGETARCH) go build -v -o bin/kbot -ldflags "-X="github.dev/DEVOPS101-PROM/kbot/cmd.appVersion=${VERSION}
+RUN CGO_ENABLED=0 GOOS=$(TARGETOS) GOARCH=$(TARGETARCH) go build -a -v -o bin/kbot -ldflags "-X 'github.dev/DEVOPS101-PROM/kbot/cmd.appVersion=${VERSION}' -extldflags '-static'" 
 
 RUN echo "Компіляцію завершено. Вміст директорії /app/bin/:"
 # --- Етап Фінального Образу для Linux ---
@@ -52,7 +52,7 @@ FROM scratch AS  final_linux
 ARG TARGETOS
 
 # Встановлення робочої директорії
-WORKDIR /
+WORKDIR /app
 
 # Копіювання скомпільованого бінарного файлу 'kbot' з етапу збирача.
 # Makefile створює 'bin/kbot' для Linux.
@@ -62,7 +62,7 @@ COPY --from=builder /etc/ssl/certs/* /etc/ssl/certs/
 # RUN chmod +x kbot
 
 # Встановлення точки входу для запуску бота
-ENTRYPOINT ["./kbot"]
+ENTRYPOINT ["/app/kbot"]
 
 FROM scratch AS  final_darwin
 # Аргумент TARGETOS потрібен для умовного виконання (хоча buildx обробляє вибір шляху)
