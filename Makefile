@@ -7,7 +7,7 @@ GO_INSTALL_VERSION := 1.24.3
 GO_LOCAL_INSTALL_DIR := $(PWD)/.go_install
 GO_LOCAL_BIN := $(GO_LOCAL_INSTALL_DIR)/go/bin/go
 GO_EXT := .tar.gz
-CURR_OS := $(shell uname -s | tr '[:upper:]' '[:lower:]')
+CURR_OS := linux
 CURR_ARCH := $(shell uname -m)
 
 # Architecture conversion
@@ -50,7 +50,7 @@ image:
 	$(RUNTIME) $(BUILDX) \
 		--platform=$(CURR_OS)/$(ARCH) \
 		-f Dockerfile \
-		--build-arg TARGETOS="linux" \
+		--build-arg TARGETOS="$(CURR_OS)" \
 		--build-arg TARGETARCH="$(ARCH)" \
 		-t $(REPO)/$(APP_NAME):$(VERSION)-$(CURR_OS)-$(ARCH) \
 		. --load
@@ -60,25 +60,25 @@ image:
 image-arm:
 	@echo "Building container image for linux/arm64 using $(CONTAINER_RUNTIME)..."
 	$(RUNTIME) $(BUILDX) \
-		--platform=$(CURR_OS)/$(ARCH) \
+		--platform=$(CURR_OS)/arm64 \
 		-f Dockerfile \
-		--build-arg TARGETOS="linux" \
+		--build-arg TARGETOS="$(CURR_OS)" \
 		--build-arg TARGETARCH="arm64" \
-		-t $(REPO)/$(APP_NAME):$(VERSION)-linux-arm64 \
+		-t $(REPO)/$(APP_NAME):$(VERSION)-$(CURR_OS)-arm64 \
 		. --load
-	@echo "Image $(REPO)/$(APP_NAME):$(VERSION)-linux-arm64 built successfully"
+	@echo "Image $(REPO)/$(APP_NAME):$(VERSION)-$(CURR_OS)-arm64 built successfully"
 
 # Build image for AMD64
 image-amd64:
 	@echo "Building container image for linux/amd64 using $(CONTAINER_RUNTIME)..."
 	$(RUNTIME) $(BUILDX) \
-		--platform=$(CURR_OS)/$(ARCH) \
+		--platform=$(CURR_OS)/amd64 \
 		-f Dockerfile \
-		--build-arg TARGETOS="linux" \
+		--build-arg TARGETOS="$(CURR_OS)" \
 		--build-arg TARGETARCH="amd64" \
-		-t $(REPO)/$(APP_NAME):$(VERSION)-linux-amd64 \
+		-t $(REPO)/$(APP_NAME):$(VERSION)-$(CURR_OS)-amd64 \
 		. --load
-	@echo "Image $(REPO)/$(APP_NAME):$(VERSION)-linux-amd64 built successfully"
+	@echo "Image $(REPO)/$(APP_NAME):$(VERSION)-$(CURR_OS)-amd64 built successfully"
 
 # Push image to registry
 push:

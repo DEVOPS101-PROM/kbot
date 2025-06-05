@@ -51,6 +51,8 @@ jobs:
           sbom: true
           build-args: |
             BUILDKIT_INLINE_CACHE=1
+            TARGETOS=linux
+            TARGETARCH=amd64
       - name: Update Helm chart version
         run: |
           VERSION=$(git describe --tags --abbrev=0)
