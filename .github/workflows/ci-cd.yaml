@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository_owner }}/kbot
+  IMAGE_NAME: devops101-prom/kbot
 permissions:
   contents: write
   packages: write
@@ -47,6 +47,8 @@ jobs:
           platforms: linux/amd64,linux/arm64
           cache-from: type=gha
           cache-to: type=gha,mode=max
+          provenance: true
+          sbom: true
       - name: Update Helm chart version
         run: |
           VERSION=$(git describe --tags --abbrev=0)
