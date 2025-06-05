@@ -17,6 +17,8 @@ jobs:
       contents: write
       packages: write
     steps:
+      - name: Log in to ghcr.io
+        run: echo "${{ secrets.CR_PAT }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
@@ -60,26 +62,26 @@ jobs:
           git add helm/kbot/values.yaml
           git commit -m "Update image tag to ${NEW_TAG}"
           git push
-  deploy:
-    needs: build-and-push
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-      - name: Update ArgoCD application
-        run: |
-          # This step would typically use the ArgoCD CLI or API to trigger a sync
-          # For now, we'll just echo a message
-          echo "ArgoCD sync would be triggered here"
-          # Example command (commented out):
-          # argocd app sync kbot --force
-      - name: Wait for deployment
-        run: |
-          echo "Waiting for deployment to complete..."
-          # Add actual deployment verification logic here
-          sleep 30
-      - name: Test bot functionality
-        run: |
-          echo "Testing bot functionality..."
-          # Add actual bot testing logic here
-          # This could include sending test messages and verifying responses
+  # deploy:
+  #   needs: build-and-push
+  #   runs-on: ubuntu-latest
+  #   steps:
+  #     - name: Checkout repository
+  #       uses: actions/checkout@v4
+  #     - name: Update ArgoCD application
+  #       run: |
+  #         # This step would typically use the ArgoCD CLI or API to trigger a sync
+  #         # For now, we'll just echo a message
+  #         echo "ArgoCD sync would be triggered here"
+  #         # Example command (commented out):
+  #         # argocd app sync kbot --force
+  #     - name: Wait for deployment
+  #       run: |
+  #         echo "Waiting for deployment to complete..."
+  #         # Add actual deployment verification logic here
+  #         sleep 30
+  #     - name: Test bot functionality
+  #       run: |
+  #         echo "Testing bot functionality..."
+  #         # Add actual bot testing logic here
+  #         # This could include sending test messages and verifying responses
