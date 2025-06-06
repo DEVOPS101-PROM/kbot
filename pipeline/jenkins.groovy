@@ -45,13 +45,13 @@ def call(Map config = [:]) {
         }
 
         environment {
-            DOCKER_REGISTRY = config.registry
-            DOCKER_IMAGE = config.imageName
+            DOCKER_REGISTRY = "${config.registry}"
+            DOCKER_IMAGE = "${config.imageName}"
             VERSION = "${env.BUILD_NUMBER}"
-            DOCKER_CREDENTIALS_ID = config.credentialsId
-            HELM_CHART_DIR = config.helmChartDir
-            HELM_RELEASE_NAME = config.helmReleaseName
-            HELM_NAMESPACE = config.helmNamespace
+            DOCKER_CREDENTIALS_ID = "${config.credentialsId}"
+            HELM_CHART_DIR = "${config.helmChartDir}"
+            HELM_RELEASE_NAME = "${config.helmReleaseName}"
+            HELM_NAMESPACE = "${config.helmNamespace}"
         }
 
         stages {
