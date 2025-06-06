@@ -61,6 +61,17 @@ def call(Map config = [:]) {
                 }
             }
 
+            stage('Get Latest Tag') {
+                steps {
+                    script {
+                        env.LATEST_TAG = sh(
+                            script: 'git describe --tags --abbrev=0 || echo "v0.0.0"',
+                            returnStdout: true
+                        ).trim()
+                    }
+                }
+            }
+
             stage('Login to GHCR') {
                 steps {
                     withCredentials([usernamePassword(
@@ -88,7 +99,8 @@ def call(Map config = [:]) {
                             make image \
                                 CONTAINER_RUNTIME=${containerRuntime} \
                                 CURR_OS=${targetOS} \
-                                ARCH=${targetArch}
+                                ARCH=${targetArch} \
+                                VERSION=${env.LATEST_TAG}
                         """
                     }
                 }
@@ -105,7 +117,8 @@ def call(Map config = [:]) {
                             make push \
                                 CONTAINER_RUNTIME=${params.CONTAINER_RUNTIME} \
                                 CURR_OS=${targetOS} \
-                                ARCH=${targetArch}
+                                ARCH=${targetArch} \
+                                VERSION=${env.LATEST_TAG}
                         """
                     }
                 }
@@ -116,7 +129,7 @@ def call(Map config = [:]) {
                     script {
                         def targetOS = params.TARGET_OS ?: config.targetOS
                         def targetArch = params.TARGET_ARCH ?: config.targetArch
-                        def newTag = "${env.VERSION}-${targetOS}-${targetArch}"
+                        def newTag = "${env.LATEST_TAG}-${targetOS}-${targetArch}"
 
                         // Update values.yaml with new image tag
                         sh """
@@ -139,7 +152,7 @@ def call(Map config = [:]) {
                     script {
                         def targetOS = params.TARGET_OS ?: config.targetOS
                         def targetArch = params.TARGET_ARCH ?: config.targetArch
-                        def newTag = "${env.VERSION}-${targetOS}-${targetArch}"
+                        def newTag = "${env.LATEST_TAG}-${targetOS}-${targetArch}"
 
                         // Deploy using Helm
                         sh """
