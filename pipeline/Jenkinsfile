@@ -138,7 +138,7 @@ pipeline {
                 ${params.CONTAINER_RUNTIME} logout ${DOCKER_REGISTRY} || true
             """
             // Clean workspace using built-in step
-            cleanDir()
+            deleteDir()
         }
         success {
             echo 'Pipeline completed successfully!'
