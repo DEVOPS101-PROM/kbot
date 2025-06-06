@@ -1,7 +1,7 @@
 image:
   registry: "ghcr.io"
   repository: "devops101-prom/kbot"
-  tag: "v1.0.17-d5aa83b"
+  tag: "v1.0.17-1b05997"
   pullPolicy: IfNotPresent
   os: linux
   arch: amd64
