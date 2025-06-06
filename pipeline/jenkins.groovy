@@ -61,15 +61,21 @@ def call(Map config = [:]) {
                 }
             }
 
-            stage('Get Latest Tag') {
+            stage('Get Version') {
                 steps {
                     script {
                         def tag = sh(
-                            script: 'git describe --tags --abbrev=0 || echo "v0.0.0"',
+                            script: 'git describe --tags --abbrev=0 2>/dev/null || echo ""',
                             returnStdout: true
                         ).trim()
-                        // Remove 'v' prefix if it exists
-                        env.LATEST_TAG = tag.startsWith('v') ? tag.substring(1) : tag
+                        
+                        if (tag.isEmpty()) {
+                            // If no tags exist, use the build number
+                            env.LATEST_TAG = env.VERSION
+                        } else {
+                            // Remove 'v' prefix if it exists
+                            env.LATEST_TAG = tag.startsWith('v') ? tag.substring(1) : tag
+                        }
                     }
                 }
             }
