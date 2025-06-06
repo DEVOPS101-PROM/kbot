@@ -52,6 +52,7 @@ jobs:
         id: get_tag
         run: |
           LATEST_TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+          LATEST_TAG=${LATEST_TAG#v}
           echo "tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -101,6 +102,7 @@ jobs:
         id: get_tag
         run: |
           LATEST_TAG=$(git describe --tags --abbrev=0 || echo "v0.0.0")
+          LATEST_TAG=${LATEST_TAG#v}
           echo "tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
       - name: Install Helm
         uses: azure/setup-helm@v3

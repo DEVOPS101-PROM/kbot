@@ -64,10 +64,12 @@ def call(Map config = [:]) {
             stage('Get Latest Tag') {
                 steps {
                     script {
-                        env.LATEST_TAG = sh(
+                        def tag = sh(
                             script: 'git describe --tags --abbrev=0 || echo "v0.0.0"',
                             returnStdout: true
                         ).trim()
+                        // Remove 'v' prefix if it exists
+                        env.LATEST_TAG = tag.startsWith('v') ? tag.substring(1) : tag
                     }
                 }
             }
