@@ -1,4 +1,4 @@
-name: CI/CD Pipeline
+name: from Jenkins
 on:
   push:
     branches: [main]
