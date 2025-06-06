@@ -280,11 +280,11 @@ kbot vX.Y.Z started
 
 * `kbot` (або `start`): Основна команда для запуску Telegram-бота.
 
-# Telegram Bot with CI/CD Pipeline
+## CI/CD Solutions
 
-This project implements a Telegram bot with a complete CI/CD pipeline using GitHub Actions, Docker, and ArgoCD.
+The project supports two CI/CD solutions: GitHub Actions and Jenkins pipeline. You can choose either based on your needs.
 
-## CI/CD Pipeline
+### GitHub Actions CI/CD Pipeline
 
 ```mermaid
 graph TD
@@ -300,7 +300,7 @@ graph TD
     I -->|Failure| K[Rollback]
 ```
 
-## Pipeline Components
+#### Pipeline Components
 
 1. **GitHub Actions Workflow**
    - Triggers on push to develop branch
@@ -324,7 +324,7 @@ graph TD
    - Self-healing capabilities
    - Health monitoring
 
-## Getting Started
+#### Getting Started with GitHub Actions
 
 1. Clone the repository:
    ```bash
@@ -335,7 +335,7 @@ graph TD
 2. Set up your Telegram bot token:
    ```bash
    # Update values.yaml with your token
-   helm upgrade --install kbot ./helm/kbot \
+   helm upgrade --install kbot ./helm \
      --set telegram.token=your-token
    ```
 
@@ -344,7 +344,7 @@ graph TD
    kubectl apply -f argocd/kbot-app.yaml
    ```
 
-## Development
+#### Development with GitHub Actions
 
 1. Create a new branch from develop:
    ```bash
@@ -360,7 +360,7 @@ graph TD
 
 3. Create a pull request to develop branch
 
-## CI/CD Process
+#### CI/CD Process with GitHub Actions
 
 1. Push to develop branch triggers workflow
 2. GitHub Actions builds and pushes Docker image
@@ -368,6 +368,166 @@ graph TD
 4. ArgoCD detects changes and syncs deployment
 5. Bot is tested automatically
 6. Deployment is verified
+
+### Jenkins Pipeline
+
+The project also includes a Jenkins pipeline for automated building, testing, and deployment. The pipeline supports multi-platform builds and integrates with GitHub Container Registry (GHCR).
+
+#### Pipeline Features
+
+* **Parameterized Builds**:
+  * Target OS selection (linux, darwin, windows)
+  * Target architecture selection (amd64, arm64)
+  * Container runtime selection (docker, podman)
+  * Default values: linux/amd64 with docker
+
+* **Build Process**:
+  1. Checks out the source code
+  2. Authenticates with GHCR
+  3. Builds the Docker image for the selected platform
+  4. Pushes the image to GHCR
+  5. Updates the Helm chart with the new image tag
+
+#### Jenkins Setup Instructions
+
+1. **Jenkins Credentials**:
+   - Go to Jenkins Dashboard
+   - Navigate to "Manage Jenkins" > "Manage Credentials"
+   - Click on "System" > "Global credentials" > "Add Credentials"
+
+2. **Required Credentials**:
+
+   a. **GitHub Container Registry (GHCR) Credentials**:
+   ```
+   Kind: Username with password
+   ID: ghcr-credentials
+   Username: your-github-username
+   Password: your-github-pat
+   Description: GitHub Container Registry Credentials
+   ```
+
+   b. **GitHub Repository Credentials** (if using private repo):
+   ```
+   Kind: Username with password
+   ID: github-repo-credentials
+   Username: your-github-username
+   Password: your-github-pat
+   Description: GitHub Repository Credentials
+   ```
+
+   c. **Kubernetes Cluster Credentials**:
+   ```
+   Kind: Kubernetes configuration (kubeconfig)
+   ID: k8s-credentials
+   Kubeconfig: your-kubeconfig-content
+   Description: Kubernetes Cluster Credentials
+   ```
+
+3. **Setting Up Environment Variables**:
+
+   a. **Global Environment Variables**:
+   - Go to "Manage Jenkins" > "Configure System"
+   - Find "Global properties" section
+   - Check "Environment variables"
+   - Add the following variables:
+     ```
+     DOCKER_REGISTRY=ghcr.io
+     DOCKER_IMAGE=devops101-prom/kbot
+     HELM_CHART_DIR=helm
+     HELM_RELEASE_NAME=kbot
+     ```
+
+   b. **Pipeline-specific Variables**:
+   - In your pipeline job configuration
+   - Under "Build Environment" section
+   - Check "Inject environment variables"
+   - Add variables in properties file format:
+     ```
+     TARGET_OS=linux
+     TARGET_ARCH=amd64
+     CONTAINER_RUNTIME=docker
+     HELM_NAMESPACE=default
+     ```
+
+4. **Using Secrets in Pipeline**:
+
+   a. **In Jenkinsfile**:
+   ```groovy
+   withCredentials([usernamePassword(
+       credentialsId: 'ghcr-credentials',
+       usernameVariable: 'DOCKER_USERNAME',
+       passwordVariable: 'DOCKER_PASSWORD'
+   )]) {
+       // Use DOCKER_USERNAME and DOCKER_PASSWORD here
+   }
+   ```
+
+   b. **In Shell Scripts**:
+   ```groovy
+   withCredentials([string(credentialsId: 'secret-id', variable: 'SECRET_VAR')]) {
+       sh '''
+           echo $SECRET_VAR > secret.txt
+       '''
+   }
+   ```
+
+5. **Security Best Practices**:
+
+   - Never store secrets in Jenkinsfile or job configurations
+   - Use credential IDs instead of hardcoded values
+   - Rotate credentials regularly
+   - Use least privilege principle for credentials
+   - Enable credential masking in console output
+   - Use separate credentials for different environments
+
+6. **Troubleshooting**:
+
+   a. **Credential Not Found**:
+   - Verify credential ID matches exactly
+   - Check if credential is in the correct scope (System/Global)
+   - Ensure Jenkins has permission to access the credential
+
+   b. **Variable Not Set**:
+   - Check if variable is defined in the correct scope
+   - Verify variable name matches exactly
+   - Check if variable is injected before use
+
+   c. **Permission Issues**:
+   - Verify Jenkins user has necessary permissions
+   - Check credential permissions
+   - Review Jenkins security settings
+
+7. **Example Configuration**:
+
+   a. **Complete Credential Setup**:
+   ```groovy
+   // In Jenkinsfile
+   environment {
+       DOCKER_REGISTRY = credentials('docker-registry')
+       DOCKER_IMAGE = credentials('docker-image')
+       GITHUB_TOKEN = credentials('github-token')
+   }
+   ```
+
+   b. **Using Multiple Credentials**:
+   ```groovy
+   withCredentials([
+       usernamePassword(credentialsId: 'ghcr-credentials', 
+                       usernameVariable: 'DOCKER_USERNAME', 
+                       passwordVariable: 'DOCKER_PASSWORD'),
+       string(credentialsId: 'telegram-token', 
+              variable: 'TELEGRAM_TOKEN')
+   ]) {
+       // Use credentials here
+   }
+   ```
+
+Remember to:
+- Keep credentials secure and never commit them to version control
+- Use different credentials for different environments
+- Regularly audit and rotate credentials
+- Follow the principle of least privilege
+- Document all credential IDs and their purposes
 
 ## Monitoring
 
