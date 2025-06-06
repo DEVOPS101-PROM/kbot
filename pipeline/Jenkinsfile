@@ -17,6 +17,11 @@ pipeline {
             defaultValue: 'docker',
             description: 'Container runtime (docker or podman)'
         )
+        booleanParam(
+            name: 'DEPLOY_TO_K8S',
+            defaultValue: false,
+            description: 'Deploy to Kubernetes cluster after build'
+        )
     }
 
     environment {
@@ -98,6 +103,28 @@ pipeline {
                         git add helm/values.yaml
                         git commit -m "Update image tag to ${newTag}"
                         git push
+                    """
+                }
+            }
+        }
+
+        stage('Deploy to Kubernetes') {
+            when {
+                expression { return params.DEPLOY_TO_K8S == true }
+            }
+            steps {
+                script {
+                    def targetOS = params.TARGET_OS ?: 'linux'
+                    def targetArch = params.TARGET_ARCH ?: 'amd64'
+                    def newTag = "${env.VERSION}-${targetOS}-${targetArch}"
+
+                    // Deploy using Helm
+                    sh """
+                        helm upgrade --install kbot helm \
+                            --namespace default \
+                            --create-namespace \
+                            --set image.repository=${env.DOCKER_REGISTRY}/${env.DOCKER_IMAGE} \
+                            --set image.tag=${newTag}
                     """
                 }
             }
