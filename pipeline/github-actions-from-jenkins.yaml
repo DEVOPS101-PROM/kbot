@@ -48,19 +48,6 @@ jobs:
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Get version
-        id: get_version
-        run: |
-          # Try to get the latest tag
-          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
-          if [ -z "$LATEST_TAG" ]; then
-            # If no tags exist, use the run number
-            LATEST_TAG="${{ env.VERSION }}"
-          else
-            # Remove 'v' prefix if it exists
-            LATEST_TAG=${LATEST_TAG#v}
-          fi
-          echo "tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Login to GHCR
@@ -69,25 +56,38 @@ jobs:
           registry: ${{ env.DOCKER_REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Get version
+        id: get_version
+        run: |
+          # Try to get the latest tag
+          TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$TAG" ]; then
+            # If no tags exist, use the commit SHA
+            VERSION=$(git rev-parse --short HEAD)
+          else
+            # Use tag exactly as is
+            VERSION=$TAG
+          fi
+          echo "VERSION=$VERSION" >> $GITHUB_ENV
       - name: Build image
         run: |
           make image \
             CONTAINER_RUNTIME=docker \
             CURR_OS=${{ github.event.inputs.target_os || 'linux' }} \
             ARCH=${{ github.event.inputs.target_arch || 'amd64' }} \
-            VERSION=${{ steps.get_version.outputs.tag }}
+            VERSION=${{ env.VERSION }}
       - name: Push image
         run: |
           make push \
             CONTAINER_RUNTIME=docker \
             CURR_OS=${{ github.event.inputs.target_os || 'linux' }} \
             ARCH=${{ github.event.inputs.target_arch || 'amd64' }} \
-            VERSION=${{ steps.get_version.outputs.tag }}
+            VERSION=${{ env.VERSION }}
       - name: Update Helm Chart
         run: |
           TARGET_OS=${{ github.event.inputs.target_os || 'linux' }}
           TARGET_ARCH=${{ github.event.inputs.target_arch || 'amd64' }}
-          NEW_TAG="${{ steps.get_version.outputs.tag }}-${TARGET_OS}-${TARGET_ARCH}"
+          NEW_TAG="${{ env.VERSION }}-${TARGET_OS}-${TARGET_ARCH}"
 
           sed -i "s/tag: \".*\"/tag: \"${NEW_TAG}\"/" ${{ env.HELM_CHART_DIR }}/values.yaml
 
@@ -130,7 +130,7 @@ jobs:
         run: |
           TARGET_OS=${{ github.event.inputs.target_os || 'linux' }}
           TARGET_ARCH=${{ github.event.inputs.target_arch || 'amd64' }}
-          NEW_TAG="${{ steps.get_version.outputs.tag }}-${TARGET_OS}-${TARGET_ARCH}"
+          NEW_TAG="${{ env.VERSION }}-${TARGET_OS}-${TARGET_ARCH}"
 
           helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ${{ env.HELM_CHART_DIR }} \
             --namespace ${{ env.HELM_NAMESPACE }} \

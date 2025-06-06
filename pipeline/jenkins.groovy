@@ -70,11 +70,14 @@ def call(Map config = [:]) {
                         ).trim()
                         
                         if (tag.isEmpty()) {
-                            // If no tags exist, use the build number
-                            env.LATEST_TAG = env.VERSION
+                            // If no tags exist, use the commit SHA
+                            env.VERSION = sh(
+                                script: 'git rev-parse --short HEAD',
+                                returnStdout: true
+                            ).trim()
                         } else {
-                            // Remove 'v' prefix if it exists
-                            env.LATEST_TAG = tag.startsWith('v') ? tag.substring(1) : tag
+                            // Use tag exactly as is
+                            env.VERSION = tag
                         }
                     }
                 }
@@ -108,7 +111,7 @@ def call(Map config = [:]) {
                                 CONTAINER_RUNTIME=${containerRuntime} \
                                 CURR_OS=${targetOS} \
                                 ARCH=${targetArch} \
-                                VERSION=${env.LATEST_TAG}
+                                VERSION=${env.VERSION}
                         """
                     }
                 }
@@ -126,7 +129,7 @@ def call(Map config = [:]) {
                                 CONTAINER_RUNTIME=${params.CONTAINER_RUNTIME} \
                                 CURR_OS=${targetOS} \
                                 ARCH=${targetArch} \
-                                VERSION=${env.LATEST_TAG}
+                                VERSION=${env.VERSION}
                         """
                     }
                 }
@@ -137,7 +140,7 @@ def call(Map config = [:]) {
                     script {
                         def targetOS = params.TARGET_OS ?: config.targetOS
                         def targetArch = params.TARGET_ARCH ?: config.targetArch
-                        def newTag = "${env.LATEST_TAG}-${targetOS}-${targetArch}"
+                        def newTag = "${env.VERSION}-${targetOS}-${targetArch}"
 
                         // Update values.yaml with new image tag
                         sh """
@@ -160,7 +163,7 @@ def call(Map config = [:]) {
                     script {
                         def targetOS = params.TARGET_OS ?: config.targetOS
                         def targetArch = params.TARGET_ARCH ?: config.targetArch
-                        def newTag = "${env.LATEST_TAG}-${targetOS}-${targetArch}"
+                        def newTag = "${env.VERSION}-${targetOS}-${targetArch}"
 
                         // Deploy using Helm
                         sh """
