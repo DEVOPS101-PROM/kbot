@@ -170,4 +170,7 @@ def call(Map config = [:]) {
             }
         }
     }
-} 
+}
+
+// Execute the pipeline with default configuration
+return this.call() 
