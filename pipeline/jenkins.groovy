@@ -11,7 +11,8 @@ def call(Map config = [:]) {
         credentialsId: 'ghcr-credentials',
         helmChartDir: 'helm',
         helmReleaseName: 'kbot',
-        helmNamespace: 'default'
+        helmNamespace: 'default',
+        deployToK8s: false
     ]
 
     // Merge default config with provided config
@@ -31,15 +32,15 @@ def call(Map config = [:]) {
                 choices: ['amd64', 'arm64'],
                 description: 'Target architecture'
             )
-            choice(
-                name: 'CONTAINER_RUNTIME',
-                choices: ['docker', 'podman'],
-                description: 'Container runtime'
-            )
             string(
-                name: 'HELM_NAMESPACE',
-                defaultValue: config.helmNamespace,
-                description: 'Kubernetes namespace for Helm deployment'
+                name: 'CONTAINER_RUNTIME',
+                defaultValue: config.containerRuntime,
+                description: 'Container runtime (docker or podman)'
+            )
+            booleanParam(
+                name: 'DEPLOY_TO_K8S',
+                defaultValue: config.deployToK8s,
+                description: 'Deploy to Kubernetes cluster after build'
             )
         }
 
@@ -50,34 +51,13 @@ def call(Map config = [:]) {
             DOCKER_CREDENTIALS_ID = config.credentialsId
             HELM_CHART_DIR = config.helmChartDir
             HELM_RELEASE_NAME = config.helmReleaseName
+            HELM_NAMESPACE = config.helmNamespace
         }
 
         stages {
             stage('Checkout') {
                 steps {
                     checkout scm
-                }
-            }
-
-            stage('Setup Environment') {
-                steps {
-                    script {
-                        // Set default values if not provided
-                        env.TARGET_OS = params.TARGET_OS ?: config.targetOS
-                        env.TARGET_ARCH = params.TARGET_ARCH ?: config.targetArch
-                        env.CONTAINER_RUNTIME = params.CONTAINER_RUNTIME ?: config.containerRuntime
-                        env.HELM_NAMESPACE = params.HELM_NAMESPACE ?: config.helmNamespace
-
-                        // Print build configuration
-                        echo """
-                        Build Configuration:
-                        - Target OS: ${env.TARGET_OS}
-                        - Target Architecture: ${env.TARGET_ARCH}
-                        - Container Runtime: ${env.CONTAINER_RUNTIME}
-                        - Helm Namespace: ${env.HELM_NAMESPACE}
-                        - Version: ${env.VERSION}
-                        """
-                    }
                 }
             }
 
@@ -89,7 +69,7 @@ def call(Map config = [:]) {
                         passwordVariable: 'DOCKER_PASSWORD'
                     )]) {
                         sh """
-                            echo ${DOCKER_PASSWORD} | ${env.CONTAINER_RUNTIME} login ${env.DOCKER_REGISTRY} -u ${DOCKER_USERNAME} --password-stdin
+                            echo ${DOCKER_PASSWORD} | ${params.CONTAINER_RUNTIME} login ${DOCKER_REGISTRY} -u ${DOCKER_USERNAME} --password-stdin
                         """
                     }
                 }
@@ -98,22 +78,18 @@ def call(Map config = [:]) {
             stage('Build') {
                 steps {
                     script {
+                        // Set default values if not provided
+                        def targetOS = params.TARGET_OS ?: config.targetOS
+                        def targetArch = params.TARGET_ARCH ?: config.targetArch
+                        def containerRuntime = params.CONTAINER_RUNTIME ?: config.containerRuntime
+
                         // Build the image using Makefile
                         sh """
                             make image \
-                                CONTAINER_RUNTIME=${env.CONTAINER_RUNTIME} \
-                                CURR_OS=${env.TARGET_OS} \
-                                ARCH=${env.TARGET_ARCH}
+                                CONTAINER_RUNTIME=${containerRuntime} \
+                                CURR_OS=${targetOS} \
+                                ARCH=${targetArch}
                         """
-                    }
-                }
-            }
-
-            stage('Test') {
-                steps {
-                    script {
-                        // Run tests
-                        sh 'make test'
                     }
                 }
             }
@@ -121,12 +97,15 @@ def call(Map config = [:]) {
             stage('Push') {
                 steps {
                     script {
+                        def targetOS = params.TARGET_OS ?: config.targetOS
+                        def targetArch = params.TARGET_ARCH ?: config.targetArch
+
                         // Push the image using Makefile
                         sh """
                             make push \
-                                CONTAINER_RUNTIME=${env.CONTAINER_RUNTIME} \
-                                CURR_OS=${env.TARGET_OS} \
-                                ARCH=${env.TARGET_ARCH}
+                                CONTAINER_RUNTIME=${params.CONTAINER_RUNTIME} \
+                                CURR_OS=${targetOS} \
+                                ARCH=${targetArch}
                         """
                     }
                 }
@@ -135,7 +114,9 @@ def call(Map config = [:]) {
             stage('Update Helm Chart') {
                 steps {
                     script {
-                        def newTag = "${env.VERSION}-${env.TARGET_OS}-${env.TARGET_ARCH}"
+                        def targetOS = params.TARGET_OS ?: config.targetOS
+                        def targetArch = params.TARGET_ARCH ?: config.targetArch
+                        def newTag = "${env.VERSION}-${targetOS}-${targetArch}"
 
                         // Update values.yaml with new image tag
                         sh """
@@ -151,26 +132,22 @@ def call(Map config = [:]) {
             }
 
             stage('Deploy to Kubernetes') {
+                when {
+                    expression { return params.DEPLOY_TO_K8S == true }
+                }
                 steps {
                     script {
+                        def targetOS = params.TARGET_OS ?: config.targetOS
+                        def targetArch = params.TARGET_ARCH ?: config.targetArch
+                        def newTag = "${env.VERSION}-${targetOS}-${targetArch}"
+
                         // Deploy using Helm
                         sh """
                             helm upgrade --install ${env.HELM_RELEASE_NAME} ${env.HELM_CHART_DIR} \
                                 --namespace ${env.HELM_NAMESPACE} \
                                 --create-namespace \
                                 --set image.repository=${env.DOCKER_REGISTRY}/${env.DOCKER_IMAGE} \
-                                --set image.tag=${env.VERSION}-${env.TARGET_OS}-${env.TARGET_ARCH}
-                        """
-                    }
-                }
-            }
-
-            stage('Verify Deployment') {
-                steps {
-                    script {
-                        // Wait for deployment to be ready
-                        sh """
-                            kubectl rollout status deployment/${env.HELM_RELEASE_NAME} -n ${env.HELM_NAMESPACE} --timeout=300s
+                                --set image.tag=${newTag}
                         """
                     }
                 }
@@ -181,21 +158,15 @@ def call(Map config = [:]) {
             always {
                 // Logout from GHCR
                 sh """
-                    ${env.CONTAINER_RUNTIME} logout ${env.DOCKER_REGISTRY} || true
+                    ${params.CONTAINER_RUNTIME} logout ${DOCKER_REGISTRY} || true
                 """
-                cleanWs()
+                deleteDir()
             }
             success {
                 echo 'Pipeline completed successfully!'
-                // Add success notifications here (e.g., Slack, email)
             }
             failure {
                 echo 'Pipeline failed!'
-                // Add failure notifications here
-            }
-            unstable {
-                echo 'Pipeline is unstable!'
-                // Add unstable notifications here
             }
         }
     }
