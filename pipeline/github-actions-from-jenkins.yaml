@@ -58,9 +58,14 @@ jobs:
       - name: Get version and commit
         id: version
         run: |
-          VERSION=$(git describe --tags --abbrev=0)
+          # Try to get the latest tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LATEST_TAG" ]; then
+            # If no tags exist, use the run number
+            LATEST_TAG="v0.0.0"
+          fi
           COMMIT=$(git rev-parse --short HEAD)
-          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "VERSION=${LATEST_TAG}" >> $GITHUB_OUTPUT
           echo "COMMIT=${COMMIT}" >> $GITHUB_OUTPUT
       - name: Build image
         run: |
@@ -102,12 +107,11 @@ jobs:
           LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
           if [ -z "$LATEST_TAG" ]; then
             # If no tags exist, use the run number
-            LATEST_TAG="${{ env.VERSION }}"
-          else
-            # Remove 'v' prefix if it exists
-            LATEST_TAG=${LATEST_TAG#v}
+            LATEST_TAG="v0.0.0"
           fi
-          echo "tag=${LATEST_TAG}" >> $GITHUB_OUTPUT
+          COMMIT=$(git rev-parse --short HEAD)
+          echo "VERSION=${LATEST_TAG}" >> $GITHUB_OUTPUT
+          echo "COMMIT=${COMMIT}" >> $GITHUB_OUTPUT
       - name: Install Helm
         uses: azure/setup-helm@v3
         with:
@@ -120,7 +124,7 @@ jobs:
         run: |
           TARGET_OS=${{ github.event.inputs.target_os || 'linux' }}
           TARGET_ARCH=${{ github.event.inputs.target_arch || 'amd64' }}
-          NEW_TAG="${{ env.VERSION }}-${TARGET_OS}-${TARGET_ARCH}"
+          NEW_TAG="${{ steps.get_version.outputs.VERSION }}-${{ steps.get_version.outputs.COMMIT }}-${TARGET_OS}-${TARGET_ARCH}"
 
           helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ${{ env.HELM_CHART_DIR }} \
             --namespace ${{ env.HELM_NAMESPACE }} \
