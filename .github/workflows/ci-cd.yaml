@@ -68,14 +68,18 @@ jobs:
             CONTAINER_RUNTIME=docker \
             CURR_OS=${{ github.event.inputs.target_os || 'linux' }} \
             ARCH=${{ github.event.inputs.target_arch || 'amd64' }} \
-            VERSION=${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}
+            VERSION=${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }} \
+            DOCKER_REGISTRY=${{ env.DOCKER_REGISTRY }} \
+            DOCKER_IMAGE=${{ env.DOCKER_IMAGE }}
       - name: Push image
         run: |
           make push \
             CONTAINER_RUNTIME=docker \
             CURR_OS=${{ github.event.inputs.target_os || 'linux' }} \
             ARCH=${{ github.event.inputs.target_arch || 'amd64' }} \
-            VERSION=${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}
+            VERSION=${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }} \
+            DOCKER_REGISTRY=${{ env.DOCKER_REGISTRY }} \
+            DOCKER_IMAGE=${{ env.DOCKER_IMAGE }}
       - name: Update Helm Chart
         run: |
           TARGET_OS=${{ github.event.inputs.target_os || 'linux' }}
