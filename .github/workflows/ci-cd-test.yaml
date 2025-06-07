@@ -1,0 +1,133 @@
+name: CI/CD Pipeline Test
+on:
+  workflow_dispatch:
+    inputs:
+      target_os:
+        description: 'Target operating system'
+        required: true
+        default: 'linux'
+        type: choice
+        options:
+          - linux
+          - darwin
+          # - windows
+      target_arch:
+        description: 'Target architecture'
+        required: true
+        default: 'amd64'
+        type: choice
+        options:
+          - amd64
+          - arm64
+      container_runtime:
+        description: 'Container runtime (docker or podman)'
+        required: true
+        default: 'docker'
+        type: string
+      deploy_to_k8s:
+        description: 'Deploy to Kubernetes cluster after build'
+        required: true
+        default: false
+        type: boolean
+env:
+  REGISTRY: localhost:5000
+  IMAGE_NAME: kbot-test
+  HELM_CHART_DIR: helm
+  HELM_RELEASE_NAME: kbot-test
+  HELM_NAMESPACE: default
+  TEST_VERSION: v9.0.0
+  TEST_COMMIT: 66ffddge
+permissions:
+  contents: write
+  packages: write
+jobs:
+  test-combinations:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        os: [linux]
+        arch: [amd64, arm64]
+        runtime: [docker]
+      max-parallel: 1
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Clean git lock files
+        run: |
+          rm -f .git/index.lock
+          rm -f .git/*.lock
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+      - name: Login to local registry
+        run: |
+          echo "Logging into local registry..."
+          echo "test" | docker login localhost:5000 -u test --password-stdin
+      - name: Get version and commit
+        id: version
+        run: |
+          echo "VERSION=${{ env.TEST_VERSION }}" >> $GITHUB_OUTPUT
+          echo "COMMIT=${{ env.TEST_COMMIT }}" >> $GITHUB_OUTPUT
+      - name: Build image
+        run: |
+          if [ "${{ matrix.runtime }}" = "podman" ]; then
+            podman build \
+              --platform ${{ matrix.os }}/${{ matrix.arch }} \
+              -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}-${{ matrix.os }}-${{ matrix.arch }} \
+              .
+          else
+            docker build \
+              --platform ${{ matrix.os }}/${{ matrix.arch }} \
+              -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}-${{ matrix.os }}-${{ matrix.arch }} \
+              .
+          fi
+      - name: Push image
+        run: |
+          if [ "${{ matrix.runtime }}" = "podman" ]; then
+            podman push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}-${{ matrix.os }}-${{ matrix.arch }}
+          else
+            docker push ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}-${{ matrix.os }}-${{ matrix.arch }}
+          fi
+      - name: Update Helm chart
+        run: |
+          NEW_TAG="${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}-${{ matrix.os }}-${{ matrix.arch }}"
+          echo "Would update image tag to: ${NEW_TAG}"
+          echo "Current values.yaml content:"
+          cat ${{ env.HELM_CHART_DIR }}/values.yaml
+          echo "Would change to:"
+          sed "s/tag: \".*\"/tag: \"${NEW_TAG}\"/" ${{ env.HELM_CHART_DIR }}/values.yaml
+          echo "Note: Changes are not committed or pushed to repository"
+      - name: Cleanup git locks
+        if: always()
+        run: |
+          rm -f .git/index.lock
+          rm -f .git/*.lock
+  test-deploy:
+    needs: test-combinations
+    if: ${{ github.event.inputs.deploy_to_k8s == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.12.0
+      - name: Configure Kubernetes
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+      - name: Deploy to Kubernetes
+        run: |
+          TARGET_OS=${{ github.event.inputs.target_os || 'linux' }}
+          TARGET_ARCH=${{ github.event.inputs.target_arch || 'amd64' }}
+          NEW_TAG="${{ env.TEST_VERSION }}-${{ env.TEST_COMMIT }}-${TARGET_OS}-${TARGET_ARCH}"
+
+          helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ${{ env.HELM_CHART_DIR }} \
+            --namespace ${{ env.HELM_NAMESPACE }} \
+            --create-namespace \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
+            --set image.tag=${NEW_TAG}

@@ -1,12 +1,44 @@
-name: CI/CD Pipeline origin
+name: CI/CD Pipeline
 on:
   push:
-    branches:
-      - develop
+    branches: [main]
+  pull_request:
+    branches: [main]
   workflow_dispatch:
+    inputs:
+      target_os:
+        description: 'Target operating system'
+        required: true
+        default: 'linux'
+        type: choice
+        options:
+          - linux
+          - darwin
+          - windows
+      target_arch:
+        description: 'Target architecture'
+        required: true
+        default: 'amd64'
+        type: choice
+        options:
+          - amd64
+          - arm64
+      container_runtime:
+        description: 'Container runtime (docker or podman)'
+        required: true
+        default: 'docker'
+        type: string
+      deploy_to_k8s:
+        description: 'Deploy to Kubernetes cluster after build'
+        required: true
+        default: false
+        type: boolean
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: devops101-prom/kbot
+  HELM_CHART_DIR: helm
+  HELM_RELEASE_NAME: kbot
+  HELM_NAMESPACE: default
 permissions:
   contents: write
   packages: write
@@ -17,73 +49,96 @@ jobs:
       contents: write
       packages: write
     steps:
-      - name: Checkout repository
+      - name: Checkout code
         uses: actions/checkout@v4
         with:
           fetch-depth: 0
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
-      - name: Log in to GitHub Container Registry
+      - name: Login to GHCR
         uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
-          password: ${{ secrets.CR_PAT }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - name: Get version and commit
         id: version
         run: |
-          VERSION=$(git describe --tags --abbrev=0)
+          # Try to get the latest tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LATEST_TAG" ]; then
+            # If no tags exist, use a default version
+            LATEST_TAG="v0.0.0"
+          fi
           COMMIT=$(git rev-parse --short HEAD)
-          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "VERSION=${LATEST_TAG}" >> $GITHUB_OUTPUT
           echo "COMMIT=${COMMIT}" >> $GITHUB_OUTPUT
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}-linux-amd64
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}-linux-arm64
-          platforms: linux/amd64,linux/arm64
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-          provenance: true
-          sbom: true
-          build-args: |
-            BUILDKIT_INLINE_CACHE=1
-            TARGETOS=linux
-            TARGETARCH=amd64
-      - name: Update Helm chart version
+      - name: Build image
         run: |
-          VERSION=$(git describe --tags --abbrev=0)
-          COMMIT=$(git rev-parse --short HEAD)
-          NEW_TAG="${VERSION}-${COMMIT}"
-          sed -i "s/tag: \".*\"/tag: \"${NEW_TAG}\"/" helm/values.yaml
+          make image \
+            CONTAINER_RUNTIME=${{ github.event.inputs.container_runtime || 'docker' }} \
+            CURR_OS=${{ github.event.inputs.target_os || 'linux' }} \
+            ARCH=${{ github.event.inputs.target_arch || 'amd64' }} \
+            VERSION=${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }} \
+            DOCKER_REGISTRY=${{ env.REGISTRY }} \
+            DOCKER_IMAGE=${{ env.IMAGE_NAME }}
+      - name: Push image
+        run: |
+          make push \
+            CONTAINER_RUNTIME=${{ github.event.inputs.container_runtime || 'docker' }} \
+            CURR_OS=${{ github.event.inputs.target_os || 'linux' }} \
+            ARCH=${{ github.event.inputs.target_arch || 'amd64' }} \
+            VERSION=${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }} \
+            DOCKER_REGISTRY=${{ env.REGISTRY }} \
+            DOCKER_IMAGE=${{ env.IMAGE_NAME }}
+      - name: Update Helm chart
+        run: |
+          TARGET_OS=${{ github.event.inputs.target_os || 'linux' }}
+          TARGET_ARCH=${{ github.event.inputs.target_arch || 'amd64' }}
+          NEW_TAG="${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}-${TARGET_OS}-${TARGET_ARCH}"
+          sed -i "s/tag: \".*\"/tag: \"${NEW_TAG}\"/" ${{ env.HELM_CHART_DIR }}/values.yaml
           git config --global user.name 'GitHub Actions'
           git config --global user.email 'github-actions@github.com'
-          git add helm/values.yaml
+          git add ${{ env.HELM_CHART_DIR }}/values.yaml
           git commit -m "Update image tag to ${NEW_TAG}"
           git push
-  # deploy:
-  #   needs: build-and-push
-  #   runs-on: ubuntu-latest
-  #   steps:
-  #     - name: Checkout repository
-  #       uses: actions/checkout@v4
-  #     - name: Update ArgoCD application
-  #       run: |
-  #         # This step would typically use the ArgoCD CLI or API to trigger a sync
-  #         # For now, we'll just echo a message
-  #         echo "ArgoCD sync would be triggered here"
-  #         # Example command (commented out):
-  #         # argocd app sync kbot --force
-  #     - name: Wait for deployment
-  #       run: |
-  #         echo "Waiting for deployment to complete..."
-  #         # Add actual deployment verification logic here
-  #         sleep 30
-  #     - name: Test bot functionality
-  #       run: |
-  #         echo "Testing bot functionality..."
-  #         # Add actual bot testing logic here
-  #         # This could include sending test messages and verifying responses
+  deploy:
+    needs: build-and-push
+    if: ${{ github.event.inputs.deploy_to_k8s == 'true' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Get version
+        id: get_version
+        run: |
+          # Try to get the latest tag
+          LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -z "$LATEST_TAG" ]; then
+            # If no tags exist, use a default version
+            LATEST_TAG="v0.0.0"
+          fi
+          COMMIT=$(git rev-parse --short HEAD)
+          echo "VERSION=${LATEST_TAG}" >> $GITHUB_OUTPUT
+          echo "COMMIT=${COMMIT}" >> $GITHUB_OUTPUT
+      - name: Install Helm
+        uses: azure/setup-helm@v3
+        with:
+          version: v3.12.0
+      - name: Configure Kubernetes
+        uses: azure/k8s-set-context@v3
+        with:
+          kubeconfig: ${{ secrets.KUBE_CONFIG }}
+      - name: Deploy to Kubernetes
+        run: |
+          TARGET_OS=${{ github.event.inputs.target_os || 'linux' }}
+          TARGET_ARCH=${{ github.event.inputs.target_arch || 'amd64' }}
+          NEW_TAG="${{ steps.get_version.outputs.VERSION }}-${{ steps.get_version.outputs.COMMIT }}-${TARGET_OS}-${TARGET_ARCH}"
+
+          helm upgrade --install ${{ env.HELM_RELEASE_NAME }} ${{ env.HELM_CHART_DIR }} \
+            --namespace ${{ env.HELM_NAMESPACE }} \
+            --create-namespace \
+            --set image.repository=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }} \
+            --set image.tag=${NEW_TAG}
