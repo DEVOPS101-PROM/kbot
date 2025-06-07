@@ -27,14 +27,32 @@ pipeline {
     environment {
         DOCKER_REGISTRY = 'ghcr.io'
         DOCKER_IMAGE = 'devops101-prom/kbot'
-        VERSION = "${env.BUILD_NUMBER}"
         DOCKER_CREDENTIALS_ID = 'ghcr-credentials'
+        HELM_CHART_DIR = 'helm'
+        HELM_RELEASE_NAME = 'kbot'
+        HELM_NAMESPACE = 'default'
     }
 
     stages {
         stage('Checkout') {
             steps {
                 checkout scm
+            }
+        }
+
+        stage('Get Version and Commit') {
+            steps {
+                script {
+                    def tag = sh(
+                        script: 'git describe --tags --abbrev=0',
+                        returnStdout: true
+                    ).trim()
+                    def commit = sh(
+                        script: 'git rev-parse --short HEAD',
+                        returnStdout: true
+                    ).trim()
+                    env.VERSION = "${tag}-${commit}"
+                }
             }
         }
 
@@ -55,17 +73,13 @@ pipeline {
         stage('Build') {
             steps {
                 script {
-                    // Set default values if not provided
-                    def targetOS = params.TARGET_OS ?: 'linux'
-                    def targetArch = params.TARGET_ARCH ?: 'amd64'
-                    def containerRuntime = params.CONTAINER_RUNTIME ?: 'docker'
-
                     // Build the image using Makefile
                     sh """
                         make image \
-                            CONTAINER_RUNTIME=${containerRuntime} \
-                            CURR_OS=${targetOS} \
-                            ARCH=${targetArch}
+                            CONTAINER_RUNTIME=${params.CONTAINER_RUNTIME} \
+                            CURR_OS=${params.TARGET_OS} \
+                            ARCH=${params.TARGET_ARCH} \
+                            VERSION=${env.VERSION}
                     """
                 }
             }
@@ -74,15 +88,13 @@ pipeline {
         stage('Push') {
             steps {
                 script {
-                    def targetOS = params.TARGET_OS ?: 'linux'
-                    def targetArch = params.TARGET_ARCH ?: 'amd64'
-
                     // Push the image using Makefile
                     sh """
                         make push \
                             CONTAINER_RUNTIME=${params.CONTAINER_RUNTIME} \
-                            CURR_OS=${targetOS} \
-                            ARCH=${targetArch}
+                            CURR_OS=${params.TARGET_OS} \
+                            ARCH=${params.TARGET_ARCH} \
+                            VERSION=${env.VERSION}
                     """
                 }
             }
@@ -91,16 +103,14 @@ pipeline {
         stage('Update Helm Chart') {
             steps {
                 script {
-                    def targetOS = params.TARGET_OS ?: 'linux'
-                    def targetArch = params.TARGET_ARCH ?: 'amd64'
-                    def newTag = "${env.VERSION}-${targetOS}-${targetArch}"
+                    def newTag = "${env.VERSION}-${params.TARGET_OS}-${params.TARGET_ARCH}"
 
                     // Update values.yaml with new image tag
                     sh """
-                        sed -i "s/tag: \".*\"/tag: \"${newTag}\"/" helm/values.yaml
+                        sed -i "s/tag: \".*\"/tag: \"${newTag}\"/" ${env.HELM_CHART_DIR}/values.yaml
                         git config --global user.name 'Jenkins'
                         git config --global user.email 'jenkins@example.com'
-                        git add helm/values.yaml
+                        git add ${env.HELM_CHART_DIR}/values.yaml
                         git commit -m "Update image tag to ${newTag}"
                         git push
                     """
@@ -114,14 +124,12 @@ pipeline {
             }
             steps {
                 script {
-                    def targetOS = params.TARGET_OS ?: 'linux'
-                    def targetArch = params.TARGET_ARCH ?: 'amd64'
-                    def newTag = "${env.VERSION}-${targetOS}-${targetArch}"
+                    def newTag = "${env.VERSION}-${params.TARGET_OS}-${params.TARGET_ARCH}"
 
                     // Deploy using Helm
                     sh """
-                        helm upgrade --install kbot helm \
-                            --namespace default \
+                        helm upgrade --install ${env.HELM_RELEASE_NAME} ${env.HELM_CHART_DIR} \
+                            --namespace ${env.HELM_NAMESPACE} \
                             --create-namespace \
                             --set image.repository=${env.DOCKER_REGISTRY}/${env.DOCKER_IMAGE} \
                             --set image.tag=${newTag}
@@ -137,7 +145,6 @@ pipeline {
             sh """
                 ${params.CONTAINER_RUNTIME} logout ${DOCKER_REGISTRY} || true
             """
-            // Clean workspace using built-in step
             deleteDir()
         }
         success {

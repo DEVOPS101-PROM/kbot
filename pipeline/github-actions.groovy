@@ -38,7 +38,6 @@ on:
 env:
   DOCKER_REGISTRY: ghcr.io
   DOCKER_IMAGE: devops101-prom/kbot
-  VERSION: ${{ github.run_number }}
   HELM_CHART_DIR: helm
   HELM_RELEASE_NAME: kbot
   HELM_NAMESPACE: default
@@ -49,6 +48,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -60,38 +61,37 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Get commit SHA
-        id: vars
-        run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+      - name: Get version and commit
+        id: version
+        run: |
+          VERSION=$(git describe --tags --abbrev=0)
+          COMMIT=$(git rev-parse --short HEAD)
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+          echo "COMMIT=${COMMIT}" >> $GITHUB_OUTPUT
 
       - name: Build image
         run: |
           make image \
             CONTAINER_RUNTIME=docker \
-            CURR_OS=${{ github.event.inputs.target_os || 'linux' }} \
-            ARCH=${{ github.event.inputs.target_arch || 'amd64' }} \
-            VERSION=${{ env.VERSION }} \
-            COMMIT=${{ steps.vars.outputs.sha_short }}
+            CURR_OS=linux \
+            ARCH=amd64 \
+            VERSION=${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}
 
       - name: Push image
         run: |
           make push \
             CONTAINER_RUNTIME=docker \
-            CURR_OS=${{ github.event.inputs.target_os || 'linux' }} \
-            ARCH=${{ github.event.inputs.target_arch || 'amd64' }} \
-            VERSION=${{ env.VERSION }} \
-            COMMIT=${{ steps.vars.outputs.sha_short }}
+            CURR_OS=linux \
+            ARCH=amd64 \
+            VERSION=${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}
 
-      - name: Update Helm Chart
+      - name: Update Helm chart
         run: |
-          TARGET_OS=${{ github.event.inputs.target_os || 'linux' }}
-          TARGET_ARCH=${{ github.event.inputs.target_arch || 'amd64' }}
-          NEW_TAG="${{ env.VERSION }}-${{ steps.vars.outputs.sha_short }}-${TARGET_OS}-${TARGET_ARCH}"
-          
+          # Update values.yaml with new image tag
+          NEW_TAG="${{ steps.version.outputs.VERSION }}-${{ steps.version.outputs.COMMIT }}-linux-amd64"
           sed -i "s/tag: \".*\"/tag: \"${NEW_TAG}\"/" ${{ env.HELM_CHART_DIR }}/values.yaml
-          
           git config --global user.name 'GitHub Actions'
-          git config --global user.email 'github-actions@github.com'
+          git config --global user.email 'actions@github.com'
           git add ${{ env.HELM_CHART_DIR }}/values.yaml
           git commit -m "Update image tag to ${NEW_TAG}"
           git push

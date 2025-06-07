@@ -47,7 +47,6 @@ def call(Map config = [:]) {
         environment {
             DOCKER_REGISTRY = "${config.registry}"
             DOCKER_IMAGE = "${config.imageName}"
-            VERSION = "${env.BUILD_NUMBER}"
             DOCKER_CREDENTIALS_ID = "${config.credentialsId}"
             HELM_CHART_DIR = "${config.helmChartDir}"
             HELM_RELEASE_NAME = "${config.helmReleaseName}"
@@ -61,24 +60,18 @@ def call(Map config = [:]) {
                 }
             }
 
-            stage('Get Version') {
+            stage('Get Version and Commit') {
                 steps {
                     script {
                         def tag = sh(
-                            script: 'git describe --tags --abbrev=0 2>/dev/null || echo ""',
+                            script: 'git describe --tags --abbrev=0',
                             returnStdout: true
                         ).trim()
-                        
-                        if (tag.isEmpty()) {
-                            // If no tags exist, use the commit SHA
-                            env.VERSION = sh(
-                                script: 'git rev-parse --short HEAD',
-                                returnStdout: true
-                            ).trim()
-                        } else {
-                            // Use tag exactly as is
-                            env.VERSION = tag
-                        }
+                        def commit = sh(
+                            script: 'git rev-parse --short HEAD',
+                            returnStdout: true
+                        ).trim()
+                        env.VERSION = "${tag}-${commit}"
                     }
                 }
             }
