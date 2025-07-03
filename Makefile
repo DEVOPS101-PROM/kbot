@@ -25,8 +25,11 @@ endif
 
 # Docker parameters
 REPO := ghcr.io
-APP_NAME := kbot
-VERSION := $(shell git describe --tags --abbrev=0)-$(shell git rev-parse --short HEAD)
+APP_NAME := devops101-prom/kbot
+# Separate tag and commit for correct docker tag formatting
+GIT_TAG := $(shell git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+GIT_COMMIT := $(shell git rev-parse --short HEAD)
+VERSION := $(GIT_TAG)-$(GIT_COMMIT)
 
 # Helm parameters
 HELM_CHART_DIR := helm
@@ -60,37 +63,34 @@ help:
 # Build image for current architecture
 image:
 	@echo "Building container image for $(CURR_OS)/$(ARCH) using $(CONTAINER_RUNTIME)..."
-	$(RUNTIME) $(BUILDX) \
-		--platform=$(CURR_OS)/$(ARCH) \
+	$(RUNTIME) build \
 		-f Dockerfile \
 		--build-arg TARGETOS="$(CURR_OS)" \
 		--build-arg TARGETARCH="$(ARCH)" \
 		-t $(REPO)/$(APP_NAME):$(VERSION)-$(CURR_OS)-$(ARCH) \
-		. --load
+		.
 	@echo "Image $(REPO)/$(APP_NAME):$(VERSION)-$(CURR_OS)-$(ARCH) built successfully"
 
 # Build image for ARM64
 image-arm:
 	@echo "Building container image for linux/arm64 using $(CONTAINER_RUNTIME)..."
-	$(RUNTIME) $(BUILDX) \
-		--platform=$(CURR_OS)/arm64 \
+	$(RUNTIME) build \
 		-f Dockerfile \
 		--build-arg TARGETOS="$(CURR_OS)" \
 		--build-arg TARGETARCH="arm64" \
 		-t $(REPO)/$(APP_NAME):$(VERSION)-$(CURR_OS)-arm64 \
-		. --load
+		.
 	@echo "Image $(REPO)/$(APP_NAME):$(VERSION)-$(CURR_OS)-arm64 built successfully"
 
 # Build image for AMD64
 image-amd64:
 	@echo "Building container image for linux/amd64 using $(CONTAINER_RUNTIME)..."
-	$(RUNTIME) $(BUILDX) \
-		--platform=$(CURR_OS)/amd64 \
+	$(RUNTIME) build \
 		-f Dockerfile \
 		--build-arg TARGETOS="$(CURR_OS)" \
 		--build-arg TARGETARCH="amd64" \
 		-t $(REPO)/$(APP_NAME):$(VERSION)-$(CURR_OS)-amd64 \
-		. --load
+		.
 	@echo "Image $(REPO)/$(APP_NAME):$(VERSION)-$(CURR_OS)-amd64 built successfully"
 
 # Push image to registry
