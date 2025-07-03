@@ -1,0 +1,27 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: GitRepository
+metadata:
+  name: kbot-monitoring
+  namespace: flux-system
+spec:
+  interval: 1m
+  url: https://github.com/your-username/kbot
+  ref:
+    branch: main
+  path: ./monitoring/k8s
+
+---
+apiVersion: kustomize.toolkit.fluxcd.io/v1
+kind: Kustomization
+metadata:
+  name: kbot-monitoring
+  namespace: flux-system
+spec:
+  interval: 10m
+  path: ./monitoring/k8s
+  prune: true
+  sourceRef:
+    kind: GitRepository
+    name: kbot-monitoring
+  targetNamespace: monitoring
+  validation: client 

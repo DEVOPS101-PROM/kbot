@@ -62,7 +62,7 @@ COPY --from=builder /etc/ssl/certs/* /etc/ssl/certs/
 # RUN chmod +x kbot
 
 # Встановлення точки входу для запуску бота
-ENTRYPOINT ["/app/kbot"]
+ENTRYPOINT ["/app/kbot", "kbot"]
 
 FROM scratch AS  final_darwin
 # Аргумент TARGETOS потрібен для умовного виконання (хоча buildx обробляє вибір шляху)
@@ -79,7 +79,7 @@ COPY --from=builder /etc/ssl/certs/* /etc/ssl/certs/
 # RUN chmod +x kbot
 
 # Встановлення точки входу для запуску бота
-ENTRYPOINT ["./kbot"]
+ENTRYPOINT ["./kbot", "kbot"]
 # --- Етап Фінального Образу для Windows ---
 # Використовуємо образ Windows Nano Server.
 # Цей етап буде ефективно використаний, якщо ви збираєте для платформи Windows

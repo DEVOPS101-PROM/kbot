@@ -4,6 +4,7 @@ Copyright © 2025 NAME HERE <EMAIL ADDRESS>
 package cmd
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -12,6 +13,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"gopkg.in/telebot.v3"
+	"github.dev/DEVOPS101-PROM/kbot/internal/telemetry"
 )
 
 var (
@@ -32,6 +34,14 @@ This application is a tool to generate the needed files
 to quickly create a Cobra application.`,
 	Run: func(cmd *cobra.Command, args []string) {
 		fmt.Printf("kbot %s started", appVersion)
+		
+		// Initialize telemetry
+		ctx := context.Background()
+		if err := telemetry.InitTelemetry(ctx, "kbot", appVersion); err != nil {
+			log.Printf("Failed to initialize telemetry: %v", err)
+		}
+		defer telemetry.Shutdown(ctx)
+		
 		commands := map[string]string{
 			"help":    "Ця команда виводить перелік команд які приймає Kbot",
 			"version": "Показує версію програми Kbot",
@@ -51,19 +61,54 @@ to quickly create a Cobra application.`,
 			return
 		}
 		kbot.Handle("/start", func(ctx telebot.Context) error {
-			log.Printf("Отримано команду /start від %s", ctx.Sender().Username)
+			startTime := time.Now()
+			username := ctx.Sender().Username
+			if username == "" {
+				username = "unknown"
+			}
+			
+			// Record command with telemetry
+			telemetryCtx := context.Background()
+			telemetry.RecordCommand(telemetryCtx, "start", username)
+			
+			log.Printf("Отримано команду /start від %s", username)
 			replyMessage := fmt.Sprintf("Привіт, %s! Я простий бот на Telebot. Напиши /help, щоб побачити список команд.", ctx.Sender().FirstName)
-			return ctx.Send(replyMessage)
+			
+			err := ctx.Send(replyMessage)
+			telemetry.RecordResponseTime("start", time.Since(startTime))
+			return err
 		})
 		kbot.Handle("/hello", func(ctx telebot.Context) error {
+			startTime := time.Now()
 			senderUsername := ctx.Sender().Username
+			if senderUsername == "" {
+				senderUsername = "unknown"
+			}
 			senderFirstName := ctx.Sender().FirstName
+			
+			// Record command with telemetry
+			telemetryCtx := context.Background()
+			telemetry.RecordCommand(telemetryCtx, "hello", senderUsername)
+			
 			log.Printf("Отримано команду /hello від %s (%s)", senderFirstName, senderUsername)
 			replyMessage := fmt.Sprintf("Привіт, %s! Радий тебе бачити. Як справи?", senderFirstName)
-			return ctx.Send(replyMessage)
+			
+			err := ctx.Send(replyMessage)
+			telemetry.RecordResponseTime("hello", time.Since(startTime))
+			return err
 		})
 		kbot.Handle("/help", func(ctx telebot.Context) error {
-			log.Printf("Отримано команду /help від %s", ctx.Sender().Username)
+			startTime := time.Now()
+			username := ctx.Sender().Username
+			if username == "" {
+				username = "unknown"
+			}
+			
+			// Record command with telemetry
+			telemetryCtx := context.Background()
+			telemetry.RecordCommand(telemetryCtx, "help", username)
+			
+			log.Printf("Отримано команду /help від %s", username)
 
 			var helpMessage strings.Builder // Використовуємо strings.Builder для ефективної конкатенації рядків
 			helpMessage.WriteString("Ось список доступних команд:\n\n")
@@ -73,25 +118,65 @@ to quickly create a Cobra application.`,
 			}
 
 			// Надсилаємо сформоване повідомлення
-			return ctx.Send(helpMessage.String())
+			err := ctx.Send(helpMessage.String())
+			telemetry.RecordResponseTime("help", time.Since(startTime))
+			return err
 		})
 		kbot.Handle("/version", func(ctx telebot.Context) error {
-			log.Printf("Отримано команду /version від %s", ctx.Sender().Username)
+			startTime := time.Now()
+			username := ctx.Sender().Username
+			if username == "" {
+				username = "unknown"
+			}
+			
+			// Record command with telemetry
+			telemetryCtx := context.Background()
+			telemetry.RecordCommand(telemetryCtx, "version", username)
+			
+			log.Printf("Отримано команду /version від %s", username)
 			var versionRepy strings.Builder
 			versionRepy.WriteString(fmt.Sprintf("Поточна версія програми kbot: %s", appVersion))
 
-			return ctx.Send(versionRepy.String())
+			err := ctx.Send(versionRepy.String())
+			telemetry.RecordResponseTime("version", time.Since(startTime))
+			return err
 		})
 		kbot.Handle("/ping", func(ctx telebot.Context) error {
-			log.Printf("Отримано команду /ping від %s", ctx.Sender().Username)
-			if response, ok := commands["ping"]; ok {
-				return ctx.Send(response)
+			startTime := time.Now()
+			username := ctx.Sender().Username
+			if username == "" {
+				username = "unknown"
 			}
-			return ctx.Send("Щось пішло не так з командою ping.")
+			
+			// Record command with telemetry
+			telemetryCtx := context.Background()
+			telemetry.RecordCommand(telemetryCtx, "ping", username)
+			
+			log.Printf("Отримано команду /ping від %s", username)
+			if response, ok := commands["ping"]; ok {
+				err := ctx.Send(response)
+				telemetry.RecordResponseTime("ping", time.Since(startTime))
+				return err
+			}
+			err := ctx.Send("Щось пішло не так з командою ping.")
+			telemetry.RecordResponseTime("ping", time.Since(startTime))
+			return err
 		})
 		kbot.Handle(telebot.OnText, func(ctx telebot.Context) error {
-			log.Printf("Отримано текст '%s' від %s", ctx.Text(), ctx.Sender().Username)
-			return ctx.Send(fmt.Sprintf("Ви написали: '%s'. Спробуйте /help для списку команд.", ctx.Text()))
+			startTime := time.Now()
+			username := ctx.Sender().Username
+			if username == "" {
+				username = "unknown"
+			}
+			
+			// Record command with telemetry
+			telemetryCtx := context.Background()
+			telemetry.RecordCommand(telemetryCtx, "text", username)
+			
+			log.Printf("Отримано текст '%s' від %s", ctx.Text(), username)
+			err := ctx.Send(fmt.Sprintf("Ви написали: '%s'. Спробуйте /help для списку команд.", ctx.Text()))
+			telemetry.RecordResponseTime("text", time.Since(startTime))
+			return err
 		})
 
 		kbot.Start()

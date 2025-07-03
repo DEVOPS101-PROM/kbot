@@ -1,0 +1,75 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kbot
+  namespace: monitoring
+  labels:
+    app: kbot
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kbot
+  template:
+    metadata:
+      labels:
+        app: kbot
+    spec:
+      containers:
+      - name: kbot
+        image: kbot:latest
+        imagePullPolicy: Never  # For local development
+        env:
+        - name: TELE_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: kbot-secret
+              key: tele-token
+        ports:
+        - containerPort: 8080
+          name: metrics
+        resources:
+          limits:
+            cpu: 200m
+            memory: 256Mi
+          requests:
+            cpu: 50m
+            memory: 64Mi
+        livenessProbe:
+          httpGet:
+            path: /metrics
+            port: 8080
+          initialDelaySeconds: 30
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /metrics
+            port: 8080
+          initialDelaySeconds: 5
+          periodSeconds: 5
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: kbot-secret
+  namespace: monitoring
+type: Opaque
+data:
+  tele-token: VEVMRV9UT0tFTl9QTFVHSU5fSEVSRQ==  # Base64 encoded placeholder
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: kbot
+  namespace: monitoring
+  labels:
+    app: kbot
+spec:
+  ports:
+  - port: 8080
+    targetPort: 8080
+    name: metrics
+  selector:
+    app: kbot 
